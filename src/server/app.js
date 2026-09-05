@@ -1,6 +1,20 @@
 import express from 'express'
+import { createAuthMiddleware } from './auth-middleware.js'
+import { createRootsRouter } from './api/roots.js'
+import { createFilesRouter } from './api/files.js'
+import { createFileRouter } from './api/file.js'
+import { createRenameMkdirRouter } from './api/rename-mkdir.js'
+import { createAssetRouter } from './api/asset.js'
 
-export function createApp({ config, logger, getUptimeSeconds, packageVersion, onShutdown }) {
+export function createApp({
+  config,
+  logger,
+  getUptimeSeconds,
+  packageVersion,
+  onShutdown,
+  roots = [],
+  extensions = [],
+}) {
   const app = express()
   app.use(express.json())
 
@@ -12,6 +26,13 @@ export function createApp({ config, logger, getUptimeSeconds, packageVersion, on
       roots: config.roots,
     })
   })
+
+  const authMiddleware = createAuthMiddleware(config)
+  app.use('/api', authMiddleware, createRootsRouter(roots))
+  app.use('/api', authMiddleware, createFilesRouter(roots, extensions))
+  app.use('/api', authMiddleware, createFileRouter(roots))
+  app.use('/api', authMiddleware, createRenameMkdirRouter(roots))
+  app.use('/api', authMiddleware, createAssetRouter(roots))
 
   app.post('/api/shutdown', (req, res) => {
     const token = req.header('X-Auth-Token')

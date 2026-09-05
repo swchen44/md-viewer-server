@@ -3,6 +3,9 @@ import { parseArgs } from '../src/server/commands/cli-args.js'
 import { runStart } from '../src/server/commands/start.js'
 import { runStatus } from '../src/server/commands/status.js'
 import { runStop } from '../src/server/commands/stop.js'
+import { runDoctor } from '../src/server/doctor.js'
+import { getConfigDir, getStateDir } from '../src/server/xdg-paths.js'
+import { readConfig } from '../src/server/config.js'
 
 function printLinks(ips, port, token) {
   const targets = ips.length > 0 ? ips : ['127.0.0.1']
@@ -65,8 +68,25 @@ async function main() {
     printStatusResult(await runStatus())
   } else if (command === 'stop') {
     printStopResult(await runStop())
+  } else if (command === 'doctor') {
+    const configDir = getConfigDir()
+    const stateDir = getStateDir()
+    const config = readConfig(configDir)
+    const results = await runDoctor({
+      configDir,
+      stateDir,
+      roots: config?.roots ?? [],
+      port: config?.port ?? 4173,
+    })
+    for (const r of results) {
+      const icon = r.status === 'ok' ? '✓' : r.status === 'warn' ? '⚠' : '✗'
+      console.log(`${icon} ${r.name}: ${r.message}`)
+    }
+    if (results.some((r) => r.status === 'fail')) process.exitCode = 1
   } else {
-    console.error(`Unknown command: ${command}\nUsage: md-viewer-server <start|stop|status> [options]`)
+    console.error(
+      `Unknown command: ${command}\nUsage: md-viewer-server <start|stop|status|doctor> [options]`
+    )
     process.exitCode = 1
   }
 }

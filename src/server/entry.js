@@ -6,8 +6,11 @@ import { getConfigDir, getStateDir } from './xdg-paths.js'
 import { readConfig } from './config.js'
 import { createLogger } from './logger.js'
 import { createApp } from './app.js'
+import { createWsServer } from './ws-server.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+const FILE_EXTENSIONS = ['.md', '.markdown', '.mkd', '.mdx', '.mdc', '.txt', '.mmd', '.html']
 
 function readPackageVersion() {
   if (typeof __MVS_BUNDLED_VERSION__ !== 'undefined') {
@@ -36,8 +39,19 @@ export function startServer({ logLevel = 'info' } = {}) {
 
   const startedAt = Date.now()
 
-  function gracefulShutdown(source) {
+  const roots = config.roots.map((rootPath, id) => ({
+    id,
+    path: rootPath,
+    name: path.basename(rootPath),
+  }))
+
+  let wsServer = null
+
+  async function gracefulShutdown(source) {
     logger.info({ source }, 'shutting down')
+    if (wsServer) {
+      await wsServer.close()
+    }
     server.close(() => {
       logger.info({}, 'server closed')
       process.exit(0)
@@ -50,6 +64,8 @@ export function startServer({ logLevel = 'info' } = {}) {
     getUptimeSeconds: () => Math.floor((Date.now() - startedAt) / 1000),
     packageVersion: readPackageVersion(),
     onShutdown: () => gracefulShutdown('api'),
+    roots,
+    extensions: FILE_EXTENSIONS,
   })
 
   const server = http.createServer(app)
@@ -64,6 +80,7 @@ export function startServer({ logLevel = 'info' } = {}) {
   server.listen(config.port, '0.0.0.0', () => {
     fs.writeFileSync(path.join(stateDir, 'server.pid'), String(process.pid))
     logger.info({ port: server.address().port }, 'server listening')
+    wsServer = createWsServer(server, { token: config.token, roots })
   })
 
   return server
