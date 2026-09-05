@@ -36,4 +36,13 @@ describe('settings', () => {
     expect(after.port).toBe(before.port)
     expect(after.roots).toEqual(before.roots)
   })
+
+  it('creates configDir if it does not exist yet (settings updated before start has ever run)', () => {
+    const freshDir = path.join(configDir, 'not-created-yet')
+    expect(fs.existsSync(freshDir)).toBe(false)
+    expect(() =>
+      updateSettings(freshDir, { plantumlServerUrl: 'https://plantuml.example.com' })
+    ).not.toThrow()
+    expect(readSettings(freshDir).plantumlServerUrl).toBe('https://plantuml.example.com')
+  })
 })

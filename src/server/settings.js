@@ -13,6 +13,7 @@ export function readSettings(configDir) {
 export function updateSettings(configDir, updates) {
   const config = readConfig(configDir) ?? {}
   const merged = { ...config, ...updates }
+  fs.mkdirSync(configDir, { recursive: true })
   fs.writeFileSync(getConfigPath(configDir), JSON.stringify(merged, null, 2))
   return readSettings(configDir)
 }
