@@ -16,6 +16,7 @@ export default [
         clearTimeout: 'readonly',
         AbortController: 'readonly',
         TextDecoder: 'readonly',
+        URL: 'readonly',
         __MVS_BUNDLED_VERSION__: 'readonly',
       },
     },
