@@ -1,0 +1,30 @@
+{
+  "name": "md-viewer-server",
+  "version": "0.1.0",
+  "description": "Background daemon serving a browser UI to view, search, and edit Markdown/HTML files over LAN",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "bin": {
+    "md-viewer-server": "./bin/cli.js"
+  },
+  "scripts": {
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "lint": "eslint .",
+    "build": "node scripts/build.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "pino": "^9.4.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.13.0",
+    "esbuild": "^0.24.0",
+    "eslint": "^9.13.0",
+    "prettier": "^3.3.3",
+    "supertest": "^7.0.0",
+    "vitest": "^2.1.0"
+  }
+}
