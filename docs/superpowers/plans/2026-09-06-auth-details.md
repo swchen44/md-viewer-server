@@ -86,7 +86,7 @@ describe('encodePlantUmlText', () => {
     const source = '@startuml\nAlice -> Bob: Authentication Request\n@enduml'
     const encoded = encodePlantUmlText(source)
 
-    const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+    const ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_'
     const sixBitValues = [...encoded].map((ch) => ALPHABET.indexOf(ch))
     const bytes = []
     for (let i = 0; i + 3 < sixBitValues.length + 1; i += 4) {
@@ -119,7 +119,7 @@ Expected: FAIL — module not found
 ```js
 import zlib from 'node:zlib'
 
-const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+const ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_'
 
 function encode6bit(value) {
   return ALPHABET[value & 0x3f]
@@ -174,8 +174,9 @@ before it can be appended to a server URL like
 What: encodePlantUmlText(diagramSource) implements PlantUML's
 documented algorithm: UTF-8 encode, raw deflate compress (no zlib
 header), then encode 3-byte groups into 4 characters from PlantUML's
-own 64-character alphabet (A-Z, a-z, 0-9, -, _ — not standard
-base64's +/).
+own 64-character alphabet (0-9, A-Z, a-z, -, _ — this exact order,
+not standard base64's +/, and not any other permutation, since the
+alphabet's order IS the encoding).
 How: No external dependency — node:zlib's deflateRawSync covers
 compression; the custom 6-bit-group encoding is implemented directly
 per PlantUML's own reference algorithm. Verified with a round-trip
