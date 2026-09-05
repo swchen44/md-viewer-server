@@ -43,7 +43,7 @@ md-viewer-server/                  ← 單一 npm 套件
     └── server.log                 ← 全英文（State）
 ```
 
-**技術選型**：Express（REST）+ `ws`（WebSocket）+ `chokidar`（跨平台檔案監控）。三者皆為純 JS 實作，沒有 native module，方便打包成單一 bundle（見「發佈與安裝」）。前端沿用 md-viewer-pwa 的 UI 概念（Tab bar、Split view、Shiki、Mermaid）但資料存取層改成打 server API，取代 File System Access API；資料夾樹＋搜尋欄互動參考 md-reader。
+**技術選型**：Express（REST）+ `ws`（WebSocket）+ `chokidar`（跨平台檔案監控）+ `pino`（結構化 log）。四者皆為純 JS 實作，沒有 native module，方便打包成單一 bundle（見「發佈與安裝」）。前端沿用 md-viewer-pwa 的 UI 概念（Tab bar、Split view、Shiki、Mermaid）但資料存取層改成打 server API，取代 File System Access API；資料夾樹＋搜尋欄互動參考 md-reader。
 
 ## 發佈與安裝
 
@@ -267,6 +267,21 @@ CLI 指令：
 - `start` 時個別 root 不存在/無權限只略過該 root 並警告，不讓整個 daemon 起不來；port 被佔用時報錯結束、不自動換 port
 - 多網卡環境下列出所有候選 IP 供使用者選擇正確的連結
 - `stop` 時 graceful shutdown：先廣播「即將關閉」事件讓前端提示存檔，再等待進行中請求完成（有逾時），才真正結束程序
+
+## Log 與 Debug 方案
+
+**結構化 Log**（`pino` — 純 JS、無 native binding，可正常打包進 `bundle.js`）：
+- JSON Lines 格式，每行一筆記錄，欄位含 `timestamp`/`level`/`message` 及依事件類型而定的上下文（`requestId`、`root`、`path` 等），一律英文
+- Level：`error`/`warn`/`info`/`debug`，透過 `--log-level` CLI 參數或環境變數設定，預設 `info`
+- **Request ID**：每個 HTTP 請求／WebSocket 連線配一個短 ID，寫入 log；debug 模式下的錯誤回應也帶上這個 ID 方便對照，一般模式前端只拿 `errorCode`，不外洩內部細節
+- **敏感資訊遮罩**：token 絕不原文寫入 log，只記錄 `auth: ok` / `auth: fail`
+- **Log rotation**：`server.log` 超過門檻大小（例如 10MB）自動輪替、保留最近幾份，避免長期背景執行把磁碟塞爆；`doctor` 增加一項檢查 log 檔案是否異常肥大
+
+**Debug 方案**：
+- `start --debug`：強制 log level 為 `debug`，並開啟 Node `--inspect`（僅綁定 `127.0.0.1`，不暴露到區網）
+- 前端開發者面板（快捷鍵喚出，例如 `Ctrl+Shift+D`）：顯示 WebSocket 連線狀態、最近事件序列、目前認證/語言/設定狀態、已開分頁清單，不用開瀏覽器 DevTools 也能自我診斷
+- 前端用 React Error Boundary 包住主要 UI 區塊（分頁內容區、側邊欄），單一檔案渲染出錯只顯示「這個檔案渲染失敗」，不會讓整個 App 白屏；詳細錯誤記到前端 console
+- 與 `doctor` 分工：`doctor` 是**環境層級**診斷（裝好了嗎、設定對嗎、port/root 通嗎），這裡是**執行期**診斷（daemon 跑起來之後實際發生了什麼）
 
 ## Doctor 健康檢查指令
 
