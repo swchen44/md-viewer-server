@@ -14,3 +14,4 @@ md-reader 是 Chrome 擴充功能，大部分教訓（MV3 CSP、host_permissions
 ## 本專案累積的教訓（隨開發進度更新）
 
 1. **pino redact 只精確匹配指定路徑，不會自動挖進巢狀物件**：`src/server/logger.js` 的 `redact: {paths: ['token']}` 只遮罩最外層剛好叫 `token` 的欄位；若之後某處把 token 包進巢狀物件（如 `{auth: {token}}`）或用別的欄位名（如 `accessToken`、`req.headers['x-auth-token']`）傳給 logger，該次呼叫的 token 就會原文外洩。對策：往後任何會記錄到認證資訊的程式碼，一律用字面上的 `logger.X({token}, ...)` 這種頂層 `token` key，不要巢狀化或改名；若某個 task 真的需要巢狀記錄，該 task 要先擴充 `redact.paths`，不能只依賴既有規則。
+2. **implementation plan 文件裡，commit message 範例若要表示「字面上的三個反引號」，不要用行首反引號跳脫語法**：`subagent-driven-development` 的 `task-brief` 腳本用簡單的 `/^```/` 判斷是否在 code fence 內，藏在某個 Task 的 commit message 裡的一行 4 個反引號（用來跳脫顯示「\`\`\`」字面值）也會觸發這個判斷，導致 fence 進出狀態算錯、後面所有 Task 標題偵測全部錯位（症狀：`task-brief` 報 `task N not found`，即使該標題明明存在）。對策：plan 文件裡任何地方要描述「三個反引號」這個概念，一律用文字描述（例如「a triple-backtick code fence」），不要用行首反引號跳脫語法；每次新增或修改 plan 文件後，可以用 `grep -c '^```' <plan>` 確認數量是偶數（配對），跑 `task-brief` 前先自我檢查一次。
