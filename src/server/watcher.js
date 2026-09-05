@@ -28,6 +28,9 @@ export function createWatcher(roots, onEvent) {
         relPath: path.relative(root.path, filePath),
       })
     })
+    watcher.on('error', (err) => {
+      onEvent({ type: 'watch-error', rootId: root.id, message: err.message })
+    })
 
     return watcher
   })
