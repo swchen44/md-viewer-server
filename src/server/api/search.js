@@ -8,6 +8,7 @@ import {
   buildOutline,
   InvalidRegexError,
 } from '../search.js'
+import { RegexTimeoutError } from '../regex-timeout.js'
 
 function findRoot(roots, rootId) {
   return roots.find((r) => r.id === Number(rootId))
@@ -16,7 +17,7 @@ function findRoot(roots, rootId) {
 export function createSearchRouter(roots, extensions) {
   const router = express.Router()
 
-  router.get('/search', (req, res) => {
+  router.get('/search', async (req, res) => {
     const root = findRoot(roots, req.query.root)
     if (!root) return res.status(404).json({ errorCode: 'ROOT_NOT_FOUND' })
 
@@ -37,10 +38,12 @@ export function createSearchRouter(roots, extensions) {
 
     try {
       const fileMatches =
-        target === 'name' || target === 'both' ? searchFileNames(files, q, { regex: isRegex }) : []
+        target === 'name' || target === 'both'
+          ? await searchFileNames(files, q, { regex: isRegex })
+          : []
       const contentMatches =
         target === 'content' || target === 'both'
-          ? searchFileContents(root.path, files, q, { regex: isRegex })
+          ? await searchFileContents(root.path, files, q, { regex: isRegex })
           : []
 
       res.set('Content-Type', 'application/json; charset=utf-8')
@@ -48,6 +51,9 @@ export function createSearchRouter(roots, extensions) {
     } catch (err) {
       if (err instanceof InvalidRegexError) {
         return res.status(400).json({ errorCode: 'INVALID_REGEX' })
+      }
+      if (err instanceof RegexTimeoutError) {
+        return res.status(400).json({ errorCode: 'REGEX_TIMEOUT' })
       }
       throw err
     }

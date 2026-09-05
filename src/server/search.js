@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { runRegexMatch } from './regex-timeout.js'
 
 export class InvalidRegexError extends Error {
   constructor(pattern) {
@@ -10,36 +11,47 @@ export class InvalidRegexError extends Error {
 }
 
 const MAX_QUERY_LENGTH = 200
-const CATASTROPHIC_BACKTRACKING_PATTERN = /\([^)]*[+*][^)]*\)[+*]/
 
-function buildMatcher(query, { regex }) {
-  if (regex) {
-    if (query.length > MAX_QUERY_LENGTH) {
-      throw new InvalidRegexError(query)
-    }
-    if (CATASTROPHIC_BACKTRACKING_PATTERN.test(query)) {
-      throw new InvalidRegexError(query)
-    }
-    try {
-      return new RegExp(query, 'i')
-    } catch {
-      throw new InvalidRegexError(query)
-    }
+function validateRegexSyntax(query) {
+  if (query.length > MAX_QUERY_LENGTH) {
+    throw new InvalidRegexError(query)
   }
+  try {
+    // Constructing the RegExp only checks syntax and is safe/cheap; the actual
+    // execution against real strings (the ReDoS risk) happens in a worker
+    // thread with a hard timeout via runRegexMatch.
+    new RegExp(query, 'i')
+  } catch {
+    throw new InvalidRegexError(query)
+  }
+}
+
+function buildSubstringMatcher(query) {
   const escaped = query.toLowerCase()
   return { test: (text) => text.toLowerCase().includes(escaped) }
 }
 
-export function searchFileNames(files, query, { regex } = {}) {
-  const matcher = buildMatcher(query, { regex })
+export async function searchFileNames(files, query, { regex } = {}) {
+  if (regex) {
+    validateRegexSyntax(query)
+    const matchedIndexes = await runRegexMatch(
+      query,
+      files.map((f) => f.relPath)
+    )
+    return matchedIndexes.map((i) => files[i])
+  }
+  const matcher = buildSubstringMatcher(query)
   return files.filter((f) => matcher.test(f.relPath))
 }
 
 const DEFAULT_MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024
 const MAX_MATCHES_PER_FILE = 3
 
-export function searchFileContents(rootDir, files, query, { regex, maxFileSizeBytes } = {}) {
-  const matcher = buildMatcher(query, { regex })
+export async function searchFileContents(rootDir, files, query, { regex, maxFileSizeBytes } = {}) {
+  if (regex) {
+    validateRegexSyntax(query)
+  }
+  const matcher = regex ? null : buildSubstringMatcher(query)
   const sizeLimit = maxFileSizeBytes ?? DEFAULT_MAX_FILE_SIZE_BYTES
   const results = []
 
@@ -51,11 +63,17 @@ export function searchFileContents(rootDir, files, query, { regex, maxFileSizeBy
 
     const absPath = path.join(rootDir, file.relPath)
     const lines = fs.readFileSync(absPath, 'utf-8').split('\n')
-    const matches = []
+    let matches
 
-    for (let i = 0; i < lines.length && matches.length < MAX_MATCHES_PER_FILE; i++) {
-      if (matcher.test(lines[i])) {
-        matches.push({ line: i + 1, text: lines[i] })
+    if (regex) {
+      const matchedIndexes = (await runRegexMatch(query, lines)).slice(0, MAX_MATCHES_PER_FILE)
+      matches = matchedIndexes.map((i) => ({ line: i + 1, text: lines[i] }))
+    } else {
+      matches = []
+      for (let i = 0; i < lines.length && matches.length < MAX_MATCHES_PER_FILE; i++) {
+        if (matcher.test(lines[i])) {
+          matches.push({ line: i + 1, text: lines[i] })
+        }
       }
     }
 
