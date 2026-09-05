@@ -23,7 +23,8 @@ export function resolveSafePath(rootDir, relPath) {
   let realCandidate = candidate
   try {
     realCandidate = fs.realpathSync(candidate)
-  } catch {
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err
     // Target doesn't exist yet (e.g. a new file about to be created) —
     // walk up to the nearest existing ancestor and check that instead.
     let dir = path.dirname(candidate)
