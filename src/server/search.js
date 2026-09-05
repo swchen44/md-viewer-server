@@ -9,8 +9,17 @@ export class InvalidRegexError extends Error {
   }
 }
 
+const MAX_QUERY_LENGTH = 200
+const CATASTROPHIC_BACKTRACKING_PATTERN = /\([^)]*[+*][^)]*\)[+*]/
+
 function buildMatcher(query, { regex }) {
   if (regex) {
+    if (query.length > MAX_QUERY_LENGTH) {
+      throw new InvalidRegexError(query)
+    }
+    if (CATASTROPHIC_BACKTRACKING_PATTERN.test(query)) {
+      throw new InvalidRegexError(query)
+    }
     try {
       return new RegExp(query, 'i')
     } catch {

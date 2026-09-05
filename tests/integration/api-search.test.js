@@ -58,6 +58,22 @@ describe('search and outline API', () => {
     expect(paths).not.toContain('plan.md')
   })
 
+  it('returns empty results for scope=open when openPaths is not provided', async () => {
+    const res = await request(buildApp()).get(
+      '/api/search?root=0&q=e&target=both&scope=open'
+    )
+    expect(res.status).toBe(200)
+    expect(res.body.fileMatches).toEqual([])
+    expect(res.body.contentMatches).toEqual([])
+  })
+
+  it('returns empty results for an empty query', async () => {
+    const res = await request(buildApp()).get('/api/search?root=0&q=&target=both')
+    expect(res.status).toBe(200)
+    expect(res.body.fileMatches).toEqual([])
+    expect(res.body.contentMatches).toEqual([])
+  })
+
   it('returns 400 for an invalid regex', async () => {
     const res = await request(buildApp()).get(
       '/api/search?root=0&q=(unclosed&target=name&regex=true'

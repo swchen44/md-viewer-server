@@ -21,11 +21,17 @@ export function createSearchRouter(roots, extensions) {
     if (!root) return res.status(404).json({ errorCode: 'ROOT_NOT_FOUND' })
 
     const { q = '', target = 'both', scope = 'all', regex, openPaths } = req.query
+
+    if (!q.trim()) {
+      res.set('Content-Type', 'application/json; charset=utf-8')
+      return res.json({ fileMatches: [], contentMatches: [] })
+    }
+
     const isRegex = regex === 'true'
 
     let files = listFiles(root.path, extensions)
-    if (scope === 'open' && openPaths) {
-      const openSet = new Set(String(openPaths).split(','))
+    if (scope === 'open') {
+      const openSet = new Set(openPaths ? String(openPaths).split(',') : [])
       files = files.filter((f) => openSet.has(f.relPath))
     }
 

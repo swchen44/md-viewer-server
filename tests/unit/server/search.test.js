@@ -29,6 +29,20 @@ describe('searchFileNames', () => {
   it('returns an empty array when nothing matches', () => {
     expect(searchFileNames(files, 'nonexistent', {})).toEqual([])
   })
+
+  it('throws InvalidRegexError for a query longer than 200 characters', () => {
+    const longQuery = 'a'.repeat(201)
+    expect(() => searchFileNames(files, longQuery, { regex: true })).toThrow(InvalidRegexError)
+  })
+
+  it('throws InvalidRegexError for a catastrophic-backtracking pattern without running it', () => {
+    expect(() => searchFileNames(files, '(a+)+$', { regex: true })).toThrow(InvalidRegexError)
+  })
+
+  it('does not reject benign patterns with a single group and quantifier', () => {
+    expect(() => searchFileNames(files, '(abc)+', { regex: true })).not.toThrow()
+    expect(() => searchFileNames(files, '\\.md$', { regex: true })).not.toThrow()
+  })
 })
 
 describe('searchFileContents', () => {
@@ -92,6 +106,28 @@ describe('searchFileContents', () => {
     expect(() =>
       searchFileContents(rootDir, [{ relPath: 'a.md', size: 10 }], '(unclosed', { regex: true })
     ).toThrow(InvalidRegexError)
+  })
+
+  it('throws InvalidRegexError for a query longer than 200 characters', () => {
+    const longQuery = 'a'.repeat(201)
+    fs.writeFileSync(path.join(rootDir, 'a.md'), 'some content')
+    expect(() =>
+      searchFileContents(rootDir, [{ relPath: 'a.md', size: 20 }], longQuery, { regex: true })
+    ).toThrow(InvalidRegexError)
+  })
+
+  it('throws InvalidRegexError for a catastrophic-backtracking pattern without running it', () => {
+    fs.writeFileSync(path.join(rootDir, 'a.md'), 'some content')
+    expect(() =>
+      searchFileContents(rootDir, [{ relPath: 'a.md', size: 20 }], '(a+)+$', { regex: true })
+    ).toThrow(InvalidRegexError)
+  })
+
+  it('does not reject benign patterns with a single group and quantifier', () => {
+    fs.writeFileSync(path.join(rootDir, 'a.md'), 'abcabc')
+    expect(() =>
+      searchFileContents(rootDir, [{ relPath: 'a.md', size: 20 }], '(abc)+', { regex: true })
+    ).not.toThrow()
   })
 })
 
