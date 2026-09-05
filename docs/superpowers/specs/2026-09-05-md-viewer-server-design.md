@@ -54,7 +54,20 @@ md-viewer-server/                  ← 單一 npm 套件
 - 安裝方式：解壓縮到使用者自己 home 目錄下任意路徑（例如 `~/tools/md-viewer-server/`），執行 `./md-viewer-server start --root ...`（wrapper 內部呼叫 `node bundle.js "$@"`）。全程不需要 `npm install`、不需要系統權限
 - daemon 執行期資料落在 XDG 標準目錄（見下一節），皆在使用者 home 目錄下，與「無 root」的假設天生相容
 - 更新版本：下載新版 tar.gz 解壓縮覆蓋，`stop` 舊的、`start` 新的，不透過 npm registry
-- 同時仍發佈到 npm registry，給網路暢通的環境用 `npx md-viewer-server` 直接執行
+- 同時仍發佈到 npm registry（套件名稱 `md-viewer-server`，已確認未被佔用），給網路暢通的環境用 `npx md-viewer-server` 直接執行；`npm publish` 排在測試全數通過、版本號確認後的最後一步
+
+## CI/CD
+
+GitHub Actions（`.github/workflows/ci.yml`），對 push／PR 觸發：
+
+1. checkout、setup-node（用專案 `.nvmrc`/`engines` 指定的版本）
+2. `npm ci`
+3. Lint：ESLint + Prettier check（+ 有 TS 的話跑 `tsc --noEmit`）
+4. `npm run test:unit`、`npm run test:integration`
+5. `npm run build`（含 esbuild bundle + 前端 Vite build，確認離線安裝包產得出來）
+6. `npm run test:e2e`（Playwright，對 build 產物啟動真實 server 測試）
+
+E2E 這步需要 headless Chromium，Playwright 官方 action 或 `npx playwright install --with-deps` 即可在 CI runner 上跑。
 
 ## 執行期資料夾（XDG Base Directory）
 
@@ -71,17 +84,19 @@ md-viewer-server/                  ← 單一 npm 套件
 
 CLI 指令：
 
+**探活機制**：不依賴 `server.pid`（可能因為程序異常死亡而殘留、或檔案被手動清除，兩者都會讓「讀 pid 檔」誤判）。一律先嘗試呼叫本機 `GET http://127.0.0.1:<port>/api/health`（見下方 API，免認證，回傳固定格式 `{service: "md-viewer-server", version, uptime, roots}`）判斷是否真的有本專案的服務在該 port 上運行；pid 檔只在 `stop` 送不到 API（例如 server 卡死沒回應）時，作為最後手段的 fallback 依據。
+
 - `start --root <path> [--root <path2> ...] [--port 4173]`
   1. 讀取/建立 XDG Config 目錄下的 `config.json`（含固定 token、port、roots 清單）
-  2. 讀 `server.pid`，用 `process.kill(pid, 0)` 探測是否已有存活程序 → 有就印出現有連結與狀態、直接結束，**不重啟**
+  2. 打 `GET /api/health` 探活 → 有回應且 `service` 欄位吻合，代表已在執行，印出現有連結與狀態、直接結束，**不重啟**
   3. 檢查每個 `--root` 是否存在且可讀；不存在/無權限的 root 略過並印警告，其餘 root 正常啟動（只要至少一個 root 有效）
-  4. 檢查 port 是否被佔用；被佔用就印錯誤並結束，**不自動改用其他 port**（避免每次連結網址不一致）
-  5. `spawn(node, [bundlePath], {detached:true, stdio:'ignore'}).unref()`，寫入 `server.pid`
+  4. 檢查 port 是否被佔用（且 `/api/health` 探活未命中，代表是別的程式佔用）；被佔用就印錯誤並結束，**不自動改用其他 port**（避免每次連結網址不一致）
+  5. `spawn(node, [bundlePath], {detached:true, stdio:'ignore'}).unref()`，寫入 `server.pid`（僅作為 fallback 用途）
   6. 偵測本機所有網卡 IP，列出候選連結（含 token）供使用者選擇正確的區網 IP；印出 `http://<ip>:<port>?token=<4位數字>`
-- `status`：讀 pid 檔並探活，活著就重印連結、root 清單、port；死了就印「未執行」
-- `stop`：對 pid 送 `SIGTERM`；收到訊號後 server 端 graceful shutdown（見下）；等待程序結束後清除 pid 檔
+- `status`：打 `GET /api/health` 探活，成功就印連結、root 清單、port、uptime；沒回應就印「未執行」（不讀 pid 檔）
+- `stop`：優先呼叫 `POST /api/shutdown`（帶 token）觸發 graceful shutdown；若呼叫失敗（server 沒回應但 port 仍被佔用，代表可能卡死），才 fallback 讀 `server.pid` 送 `SIGTERM`。清除 `server.pid`
   - **Graceful shutdown**：停止接受新的 HTTP/WS 連線、對所有連線中的前端推播「伺服器即將關閉」事件（前端據此提示使用者存檔）、等待進行中的寫入請求完成（有逾時上限）、關閉 chokidar watcher、結束程序
-- `doctor [--fix]`：見「Doctor 健康檢查指令」章節
+- `doctor [--fix]`：見「Doctor 健康檢查指令」章節，「背景是否已啟動」一項同樣用 `/api/health` 探活，不看 pid 檔
 
 ## 認證與安全性
 
@@ -101,10 +116,12 @@ CLI 指令：
 
 **檔案定址規則**：所有 API 用 `root=<編號>&path=<root 內相對路徑>` 指定檔案，多 root 情況下前端一律要標明來源 root。
 
-**REST API**（除 WebSocket handshake 外，皆需要 `X-Auth-Token` header）：
+**REST API**（除 `GET /api/health`、WebSocket handshake 外，皆需要 `X-Auth-Token` header）：
 
 | Method & Path | 用途 |
 |---|---|
+| `GET /api/health` | **免認證**。回傳 `{service: "md-viewer-server", version, uptime, roots}` 固定格式，供 CLI（`start`/`status`/`doctor`）探活，不含機密資訊 |
+| `POST /api/shutdown` | 觸發 graceful shutdown，供 `stop` 指令呼叫 |
 | `GET /api/roots` | 列出所有 root（編號、顯示名稱），前端用來決定是否顯示 root 分層 |
 | `GET /api/files?root=` | 列出該 root 下所有符合副檔名的檔案（樹狀結構，含相對路徑、大小、mtime） |
 | `GET /api/file?root=&path=` | 讀取檔案內容，回傳 `{content, mtime, encoding}`；非 UTF-8 檔案標記 `encoding` 供前端提示唯讀 |
@@ -120,6 +137,8 @@ CLI 指令：
 | `POST /api/css-presets` | body `{name, css}`，新增一筆範本並寫回 `css-presets.json` |
 
 檔案不存在、無權限、寫入失敗等一律回傳 `{errorCode: "..."}` 這種結構化錯誤碼（不是英文字串），前端依照目前語言翻譯成對應訊息顯示；後端 `server.log` 一律記錄英文原始訊息。
+
+**Charset**：所有回傳文字內容的 API（`/api/file` 內容、`/api/asset` 的文字類 MIME）一律在 `Content-Type` 明確加上 `; charset=utf-8`，不依賴瀏覽器嗅探——md-reader 曾因缺這個標頭讓 CJK 內容被誤判編碼、位元組級損毀（見 `docs/LESSONS.md`）。
 
 **WebSocket**（`/ws?token=xxxx`）：
 - `chokidar.watch(root, {ignored: [/node_modules/, /\.git/], depth: <上限>})` 監控每個 root
@@ -260,17 +279,54 @@ CLI 指令：
 3. XDG Config／State 目錄是否存在且可寫，不存在時 `--fix` 可直接建立
 4. `config.json` 是否存在、格式正確、token 是合法的 4 位數字
 5. 每個 root 路徑是否存在、可讀、可寫
-6. port 是否被佔用
-7. **stale pid 檢查**：`server.pid` 存在但對應程序已死 → 警告，`--fix` 自動清除該 pid 檔
-8. Linux inotify watch 上限檢查（讀 `/proc/sys/fs/inotify/max_user_watches`），root 底下檔案數接近或超過上限就警告（使用者可能沒有權限調整系統參數，只能提示排除大型子目錄或減少 root 數量）
-9. 若「傳送圖表原始碼到 PlantUML server」已開啟，檢查設定的 server 網址是否可連線
-10. XDG 目錄所在磁碟剩餘空間檢查，過低則警告
+6. **背景是否已啟動**：打 `GET /api/health` 探活（不看 pid 檔，pid 可能因程序異常死亡殘留、或被手動清除而不可靠）；有回應就視為運行中並顯示 uptime/root 清單
+7. port 是否被佔用但 `/api/health` 探活未命中 → 代表被別的程式佔用
+8. **stale pid 檢查**：`server.pid` 存在但 `/api/health` 探活沒有回應（代表程序已死或從未正常啟動）→ 警告，`--fix` 自動清除該 pid 檔
+9. Linux inotify watch 上限檢查（讀 `/proc/sys/fs/inotify/max_user_watches`），root 底下檔案數接近或超過上限就警告（使用者可能沒有權限調整系統參數，只能提示排除大型子目錄或減少 root 數量）
+10. 若「傳送圖表原始碼到 PlantUML server」已開啟，檢查設定的 server 網址是否可連線
+11. XDG 目錄所在磁碟剩餘空間檢查，過低則警告
 
 ## 測試策略
 
 - **Unit**（Vitest）：後端純函式（token 產生、mtime 比對邏輯、副檔名過濾、路徑安全檢查、搜尋比對/regex 驗證、XDG 路徑解析含 fallback、doctor 各檢查項目的判斷邏輯）；前端純邏輯（i18n 格式化、tab 狀態 reducer、dirty 判斷）
 - **Integration**（Vitest + supertest 等）：REST API 端到端測試（含 409 衝突情境、多 root 檔案列表、`.bak` 備份行為、path traversal 防護、搜尋 API 各種 mode）；WebSocket 推播測試（改檔案 → 驗證收到對應事件）
 - **E2E**（Playwright）：完整使用情境 —— 帶 token 連線（含網址 token 清除行為）、開檔編輯存檔、模擬外部改檔觸發衝突對話框、搜尋各模式切換、側邊欄兩種模式切換、多 root 顯示、html sandbox 是否成功阻擋 script 存取 token、RWD 窄螢幕基本可用性
+
+### `tests/` 目錄結構
+
+鏡像 `src/` 結構，方便定位對應測試；unit/integration 用 Vitest（node 環境），e2e 用 Playwright（需先啟動真實 server）：
+
+```
+tests/
+├── unit/
+│   ├── server/
+│   │   ├── auth.test.js
+│   │   ├── watcher.test.js
+│   │   ├── doctor.test.js
+│   │   ├── xdg-paths.test.js
+│   │   └── search.test.js
+│   └── frontend/
+│       ├── i18n.test.js
+│       └── tab-reducer.test.js
+├── integration/
+│   ├── api-files.test.js       ← 讀寫、409 衝突、path traversal
+│   ├── api-search.test.js
+│   ├── api-css-presets.test.js
+│   └── websocket.test.js
+└── e2e/
+    ├── auth-flow.spec.js
+    ├── edit-conflict.spec.js
+    ├── search.spec.js
+    ├── sidebar-modes.spec.js
+    └── html-sandbox.spec.js    ← 驗證 sandboxed iframe 拿不到 token
+```
+
+### Linter / 靜態檢查
+
+- **ESLint**（flat config，`eslint.config.js`，沿用 md-viewer-pwa 的慣例）：涵蓋前後端 JS/TS
+- 若前後端用 TypeScript：`tsc --noEmit` 納入 CI 做型別檢查
+- **Prettier**：格式化，避免全域搜尋取代破壞既有排版
+- 三者皆納入 CI（見「CI/CD」）
 
 ## 範圍外（本次不做）
 
