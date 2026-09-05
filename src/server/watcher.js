@@ -9,6 +9,7 @@ export function createWatcher(roots, onEvent) {
       ignored: /(^|[/\\])(node_modules|\.git)([/\\]|$)/,
       depth: WATCH_DEPTH,
       ignoreInitial: true,
+      followSymlinks: false,
     })
 
     watcher.on('add', (filePath) => {

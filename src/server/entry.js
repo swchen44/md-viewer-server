@@ -37,6 +37,10 @@ export function startServer({ logLevel = 'info' } = {}) {
     level: logLevel,
   })
 
+  process.on('uncaughtException', (err) => {
+    logger.error({ err: err.message, stack: err.stack }, 'uncaught exception (process kept alive)')
+  })
+
   const startedAt = Date.now()
 
   const roots = config.roots.map((rootPath, id) => ({

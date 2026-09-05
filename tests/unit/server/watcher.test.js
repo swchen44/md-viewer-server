@@ -84,6 +84,32 @@ describe('createWatcher', () => {
     expect(onEvent).not.toHaveBeenCalled()
   })
 
+  it('does not follow a symlink pointing outside the watched root', async () => {
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'watcher-outside-'))
+    try {
+      const outsideFile = path.join(outsideDir, 'secret.md')
+      fs.writeFileSync(outsideFile, 'v1')
+      fs.symlinkSync(outsideDir, path.join(rootDir, 'linked'), 'dir')
+
+      const onEvent = vi.fn()
+      watcher = createWatcher([{ id: 0, path: rootDir }], onEvent)
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      // With followSymlinks:false, chokidar's initial scan reports the
+      // symlink entry itself once (harmless — just "this symlink exists",
+      // not a change inside the target). Clear that before asserting on
+      // the behavior actually under test: does a change made THROUGH the
+      // symlink, to a file outside the root, produce an event?
+      onEvent.mockClear()
+
+      fs.writeFileSync(outsideFile, 'v2')
+      await new Promise((resolve) => setTimeout(resolve, 500))
+
+      expect(onEvent).not.toHaveBeenCalled()
+    } finally {
+      fs.rmSync(outsideDir, { recursive: true, force: true })
+    }
+  })
+
   it('forwards a watcher error to onEvent as watch-error, without throwing', () => {
     // Synthetic error via a spied-in fake FSWatcher — avoids depending on the
     // OS/sandbox actually surfacing a real fs error (e.g. EACCES) within a

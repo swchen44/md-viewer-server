@@ -31,13 +31,24 @@ export function createAssetRouter(roots) {
 
     try {
       const absPath = resolveSafePath(root.path, req.query.path)
-      if (!fs.existsSync(absPath)) return res.status(404).json({ errorCode: 'FILE_NOT_FOUND' })
+      if (!fs.existsSync(absPath) || !fs.statSync(absPath).isFile()) {
+        return res.status(404).json({ errorCode: 'FILE_NOT_FOUND' })
+      }
 
       const ext = path.extname(absPath).toLowerCase()
       const mime = MIME_TYPES[ext] ?? 'application/octet-stream'
       const contentType = TEXT_LIKE.has(ext) ? `${mime}; charset=utf-8` : mime
       res.set('Content-Type', contentType)
-      fs.createReadStream(absPath).pipe(res)
+
+      const stream = fs.createReadStream(absPath)
+      stream.on('error', () => {
+        if (!res.headersSent) {
+          res.status(500).json({ errorCode: 'READ_ERROR' })
+        } else {
+          res.destroy()
+        }
+      })
+      stream.pipe(res)
     } catch (err) {
       if (err instanceof PathSafetyError) return res.status(400).json({ errorCode: 'UNSAFE_PATH' })
       throw err

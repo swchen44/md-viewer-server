@@ -16,7 +16,7 @@ export function createApp({
   extensions = [],
 }) {
   const app = express()
-  app.use(express.json())
+  app.use(express.json({ limit: '10mb' }))
 
   app.get('/api/health', (req, res) => {
     res.json({

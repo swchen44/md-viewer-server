@@ -61,4 +61,11 @@ describe('rename, mkdir, asset API', () => {
     const res = await request(buildApp()).get('/api/asset?root=0&path=missing.png')
     expect(res.status).toBe(404)
   })
+
+  it('GET /api/asset returns 404 (not a crash) when path is a directory', async () => {
+    fs.mkdirSync(path.join(rootDir, 'subdir'))
+    const res = await request(buildApp()).get('/api/asset?root=0&path=subdir')
+    expect(res.status).toBe(404)
+    expect(res.body.errorCode).toBe('FILE_NOT_FOUND')
+  })
 })
