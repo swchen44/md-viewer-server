@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { EventEmitter } from 'node:events'
+import chokidar from 'chokidar'
 import { createWatcher } from '../../../src/server/watcher.js'
 
 describe('createWatcher', () => {
@@ -80,5 +82,23 @@ describe('createWatcher', () => {
     await new Promise((resolve) => setTimeout(resolve, 500))
 
     expect(onEvent).not.toHaveBeenCalled()
+  })
+
+  it('forwards a watcher error to onEvent as watch-error, without throwing', () => {
+    // Synthetic error via a spied-in fake FSWatcher — avoids depending on the
+    // OS/sandbox actually surfacing a real fs error (e.g. EACCES) within a
+    // timeout, which proved unreliable in practice.
+    const fakeWatcher = new EventEmitter()
+    fakeWatcher.close = vi.fn(() => Promise.resolve())
+    const watchSpy = vi.spyOn(chokidar, 'watch').mockReturnValue(fakeWatcher)
+
+    const onEvent = vi.fn()
+    watcher = createWatcher([{ id: 0, path: rootDir }], onEvent)
+
+    fakeWatcher.emit('error', new Error('boom'))
+
+    expect(onEvent).toHaveBeenCalledWith({ type: 'watch-error', rootId: 0, message: 'boom' })
+
+    watchSpy.mockRestore()
   })
 })
