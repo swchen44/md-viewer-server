@@ -68,4 +68,24 @@ describe('WebSocket server', () => {
     )
     ws.close()
   })
+
+  it('close() resolves promptly even if a client is still connected', async () => {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws?token=1234`)
+    await new Promise((resolve, reject) => {
+      ws.on('open', resolve)
+      ws.on('error', reject)
+    })
+    ws.on('error', () => {}) // the server terminates the socket during close()
+
+    // Deliberately do NOT close the client here. Prior to the fix, wss.close()
+    // would hang forever waiting for this client to disconnect on its own.
+    const closePromise = wsServer.close()
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('close() timed out')), 2000)
+    )
+
+    await expect(Promise.race([closePromise, timeoutPromise])).resolves.toBeUndefined()
+
+    // afterEach will call wsServer.close() again; that should be a no-op/safe.
+  })
 })
