@@ -27,3 +27,7 @@ value in constant time; WS upgrade handler checks token before accepting.
 ## Design spec
 
 See `docs/superpowers/specs/2026-09-05-md-viewer-server-design.md` for the full design.
+
+## UI checkpoint review during implementation
+
+When executing the implementation plan, pause after each completed UI-facing segment (e.g. one panel, one view mode, one settings tab) and present it to the user for acceptance before starting the next segment. The user may not be at the keyboard continuously: schedule a wakeup roughly 3 minutes out; if there's no response by then, treat the segment as accepted and continue to the next one. Non-UI backend segments (API endpoints, daemon logic) don't need this checkpoint — only pause where a human needs to actually look at something.
