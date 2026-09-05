@@ -5,7 +5,7 @@ import { runStatus } from '../src/server/commands/status.js'
 import { runStop } from '../src/server/commands/stop.js'
 import { runDoctor } from '../src/server/doctor.js'
 import { getConfigDir, getStateDir } from '../src/server/xdg-paths.js'
-import { readConfig } from '../src/server/config.js'
+import { readConfig, rotateToken } from '../src/server/config.js'
 
 function printLinks(ips, port, token) {
   const targets = ips.length > 0 ? ips : ['127.0.0.1']
@@ -60,9 +60,21 @@ function printStopResult(result) {
 }
 
 async function main() {
-  const { command, roots, port, debug } = parseArgs(process.argv.slice(2))
+  const { command, roots, port, debug, rotateToken: shouldRotateToken } = parseArgs(
+    process.argv.slice(2)
+  )
 
   if (command === 'start') {
+    if (shouldRotateToken) {
+      try {
+        const rotated = rotateToken(getConfigDir())
+        console.log(`Token rotated: ${rotated.token}`)
+      } catch (err) {
+        console.error(err.message)
+        process.exitCode = 1
+        return
+      }
+    }
     printStartResult(await runStart({ roots, port, debug }))
   } else if (command === 'status') {
     printStatusResult(await runStatus())

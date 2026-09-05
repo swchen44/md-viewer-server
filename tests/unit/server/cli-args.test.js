@@ -25,4 +25,9 @@ describe('parseArgs', () => {
     expect(parseArgs(['start', '--root', '/a', '--debug']).debug).toBe(true)
     expect(parseArgs(['start', '--root', '/a']).debug).toBe(false)
   })
+
+  it('parses --rotate-token as a boolean flag', () => {
+    expect(parseArgs(['start', '--rotate-token']).rotateToken).toBe(true)
+    expect(parseArgs(['start']).rotateToken).toBe(false)
+  })
 })

@@ -33,3 +33,13 @@ export function loadOrCreateConfig(configDir, { roots, port }) {
   fs.writeFileSync(getConfigPath(configDir), JSON.stringify(config, null, 2))
   return config
 }
+
+export function rotateToken(configDir) {
+  const existing = readConfig(configDir)
+  if (!existing) {
+    throw new Error('No config.json found; nothing to rotate. Run `start` first.')
+  }
+  const updated = { ...existing, token: generateToken() }
+  fs.writeFileSync(getConfigPath(configDir), JSON.stringify(updated, null, 2))
+  return updated
+}

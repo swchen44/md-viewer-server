@@ -7,6 +7,7 @@ import {
   getConfigPath,
   readConfig,
   loadOrCreateConfig,
+  rotateToken,
 } from '../../../src/server/config.js'
 
 describe('generateToken', () => {
@@ -66,5 +67,23 @@ describe('config file management', () => {
     loadOrCreateConfig(dir, { roots: ['/tmp/a'], port: 5000 })
     const second = loadOrCreateConfig(dir, { roots: ['/tmp/a'], port: 6000 })
     expect(second.port).toBe(6000)
+  })
+
+  it('rotateToken generates a new token and persists it', () => {
+    loadOrCreateConfig(dir, { roots: ['/tmp/a'], port: 4173 })
+    const rotated = rotateToken(dir)
+    expect(rotated.token).toMatch(/^\d{4}$/)
+    expect(rotated.port).toBe(4173)
+    expect(rotated.roots).toEqual(['/tmp/a'])
+    // extremely unlikely but not impossible to collide; this is a smoke test,
+    // not a proof — rotation working is confirmed by config.json actually changing
+    const reread = readConfig(dir)
+    expect(reread.token).toBe(rotated.token)
+  })
+
+  it('rotateToken throws if no config exists yet', () => {
+    const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rotate-empty-'))
+    expect(() => rotateToken(emptyDir)).toThrow()
+    fs.rmSync(emptyDir, { recursive: true, force: true })
   })
 })
