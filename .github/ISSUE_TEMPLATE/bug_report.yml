@@ -1,0 +1,61 @@
+name: Bug report
+description: 回報一個問題 / Report a bug
+labels: ["bug"]
+body:
+  - type: textarea
+    id: repro-steps
+    attributes:
+      label: 重現步驟 / Steps to reproduce
+      description: 請列出可以重現這個問題的完整步驟 / List the exact steps that reproduce this issue
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 預期行為 / Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 實際行為 / Actual behavior
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: 作業系統（server 端）/ Server OS
+      placeholder: e.g. Ubuntu 22.04
+    validations:
+      required: true
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js 版本 / Node.js version
+      placeholder: "node -v 的輸出 / output of `node -v`"
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: 瀏覽器與版本 / Browser and version
+      placeholder: e.g. Chrome 131 on Windows 11
+    validations:
+      required: true
+  - type: input
+    id: app-version
+    attributes:
+      label: md-viewer-server 版本 / md-viewer-server version
+      placeholder: "md-viewer-server --version 的輸出"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 相關 log / Relevant log output
+      description: 若有的話請附上 server.log 片段（`md-viewer-server doctor` 會顯示 log 位置）
+      render: shell
