@@ -1,6 +1,6 @@
 import zlib from 'node:zlib'
 
-const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+const ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_'
 
 function encode6bit(value) {
   return ALPHABET[value & 0x3f]
