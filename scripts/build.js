@@ -13,6 +13,7 @@ await build({
   target: 'node18',
   outfile: path.join(root, 'dist', 'bundle.js'),
   banner: { js: '#!/usr/bin/env node' },
+  external: ['express', 'pino'],
 })
 
 console.log('Built dist/bundle.js')
