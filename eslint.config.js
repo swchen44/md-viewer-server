@@ -15,6 +15,7 @@ export default [
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
         AbortController: 'readonly',
+        AbortSignal: 'readonly',
         TextDecoder: 'readonly',
         URL: 'readonly',
         __MVS_BUNDLED_VERSION__: 'readonly',
