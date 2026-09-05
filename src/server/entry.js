@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { getConfigDir, getStateDir } from './xdg-paths.js'
 import { readConfig } from './config.js'
 import { createLogger } from './logger.js'
@@ -10,18 +10,11 @@ import { createApp } from './app.js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 function readPackageVersion() {
-  let dir = __dirname
-  for (let i = 0; i < 5; i++) {
-    const pkgPath = path.join(dir, 'package.json')
-    if (fs.existsSync(pkgPath)) {
-      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
-      if (pkg.name === 'md-viewer-server') return pkg.version
-    }
-    const parent = path.dirname(dir)
-    if (parent === dir) break
-    dir = parent
+  if (typeof __MVS_BUNDLED_VERSION__ !== 'undefined') {
+    return __MVS_BUNDLED_VERSION__
   }
-  throw new Error('could not locate md-viewer-server package.json to read version')
+  const pkgPath = path.join(__dirname, '..', '..', 'package.json')
+  return JSON.parse(fs.readFileSync(pkgPath, 'utf8')).version
 }
 
 export function startServer({ logLevel = 'info' } = {}) {
@@ -71,6 +64,20 @@ export function startServer({ logLevel = 'info' } = {}) {
   return server
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+function isMainModule() {
+  // import.meta.url is resolved through realpath (e.g. macOS's /tmp ->
+  // /private/tmp, /var -> /private/var), but process.argv[1] is not, so a
+  // literal string comparison can spuriously fail whenever the script is
+  // invoked through a path that traverses a symlink (as happens for tmp
+  // dirs used in isolated deployment testing). Resolve both sides the
+  // same way before comparing.
+  try {
+    return import.meta.url === pathToFileURL(fs.realpathSync(process.argv[1])).href
+  } catch {
+    return false
+  }
+}
+
+if (isMainModule()) {
   startServer()
 }

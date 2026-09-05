@@ -85,17 +85,28 @@ describe('CLI lifecycle: start -> status -> stop', () => {
 describe('dist/bundle.js (built artifact)', () => {
   let configHome
   let stateHome
+  let isolatedDir
+  let isolatedBundlePath
   let child
 
   beforeEach(() => {
     configHome = fs.mkdtempSync(path.join(os.tmpdir(), 'bundle-config-'))
     stateHome = fs.mkdtempSync(path.join(os.tmpdir(), 'bundle-state-'))
+    // Copy the bundle into an isolated tmp directory with no ancestor
+    // package.json, so this genuinely simulates the documented offline
+    // tarball deployment (bundle.js alone) rather than accidentally
+    // passing because a package.json happens to be reachable from the
+    // git checkout.
+    isolatedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mvs-bundle-isolated-'))
+    isolatedBundlePath = path.join(isolatedDir, 'bundle.js')
+    fs.copyFileSync(BUNDLE_PATH, isolatedBundlePath)
   })
 
   afterEach(() => {
     if (child) child.kill('SIGTERM')
     fs.rmSync(configHome, { recursive: true, force: true })
     fs.rmSync(stateHome, { recursive: true, force: true })
+    fs.rmSync(isolatedDir, { recursive: true, force: true })
   })
 
   it('serves /api/health when run directly (no src/ involved)', async () => {
@@ -108,7 +119,7 @@ describe('dist/bundle.js (built artifact)', () => {
       JSON.stringify({ token: '1234', port: TEST_PORT + 1, roots: ['/tmp/project'] })
     )
 
-    child = spawn(process.execPath, [BUNDLE_PATH], {
+    child = spawn(process.execPath, [isolatedBundlePath], {
       env: {
         ...process.env,
         XDG_CONFIG_HOME: configHome,
