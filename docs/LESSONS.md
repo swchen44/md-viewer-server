@@ -13,4 +13,4 @@ md-reader 是 Chrome 擴充功能，大部分教訓（MV3 CSP、host_permissions
 
 ## 本專案累積的教訓（隨開發進度更新）
 
-（尚未開始實作，之後每踩到一個坑就在這裡補一條）
+1. **pino redact 只精確匹配指定路徑，不會自動挖進巢狀物件**：`src/server/logger.js` 的 `redact: {paths: ['token']}` 只遮罩最外層剛好叫 `token` 的欄位；若之後某處把 token 包進巢狀物件（如 `{auth: {token}}`）或用別的欄位名（如 `accessToken`、`req.headers['x-auth-token']`）傳給 logger，該次呼叫的 token 就會原文外洩。對策：往後任何會記錄到認證資訊的程式碼，一律用字面上的 `logger.X({token}, ...)` 這種頂層 `token` key，不要巢狀化或改名；若某個 task 真的需要巢狀記錄，該 task 要先擴充 `redact.paths`，不能只依賴既有規則。
