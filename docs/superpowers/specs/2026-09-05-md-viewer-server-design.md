@@ -27,18 +27,20 @@
 
 ```
 md-viewer-server/                  ← 單一 npm 套件
-├── bin/cli.js                     ← start / stop / status 指令入口
+├── bin/cli.js                     ← start / stop / status / doctor 指令入口
 ├── src/server/                    ← Express + ws 後端
 │   ├── daemon.js                  ← detached child_process 管理、pid/log 檔
 │   ├── api/                       ← REST API（檔案清單、讀寫、搜尋、資源）
 │   ├── watcher.js                 ← chokidar 監控 root 資料夾 → WebSocket 推播
+│   ├── doctor.js                  ← 健康檢查邏輯
 │   └── auth.js                    ← token 驗證 middleware
 ├── src/frontend/                  ← Vite + React SPA（build 成靜態檔）
 │   └── dist/                      ← server 直接 serve 這裡
-└── ~/.md-viewer-server/           ← 執行期資料（使用者自己可寫的路徑，不需要 root）
-    ├── config.json                ← 固定 token、port、roots 清單
-    ├── server.pid
-    └── server.log                 ← 全英文
+└── (XDG 目錄，見「執行期資料夾」章節)
+    ├── config.json                ← 固定 token、port、roots 清單（Config）
+    ├── css-presets.json           ← 自訂 CSS 範本清單（Config）
+    ├── server.pid                 ← （State）
+    └── server.log                 ← 全英文（State）
 ```
 
 **技術選型**：Express（REST）+ `ws`（WebSocket）+ `chokidar`（跨平台檔案監控）。三者皆為純 JS 實作，沒有 native module，方便打包成單一 bundle（見「發佈與安裝」）。前端沿用 md-viewer-pwa 的 UI 概念（Tab bar、Split view、Shiki、Mermaid）但資料存取層改成打 server API，取代 File System Access API；資料夾樹＋搜尋欄互動參考 md-reader。
@@ -50,16 +52,27 @@ md-viewer-server/                  ← 單一 npm 套件
 - 用 `esbuild` 把 server 端程式碼與所有 npm 依賴（express/ws/chokidar 皆純 JS）打包成單一 `bundle.js`，不依賴 `node_modules` 目錄
 - 發佈物：`md-viewer-server-<version>.tar.gz`，內含 `bundle.js` + build 好的前端靜態檔 + 一個 shell wrapper script
 - 安裝方式：解壓縮到使用者自己 home 目錄下任意路徑（例如 `~/tools/md-viewer-server/`），執行 `./md-viewer-server start --root ...`（wrapper 內部呼叫 `node bundle.js "$@"`）。全程不需要 `npm install`、不需要系統權限
-- daemon 執行期資料本來就落在 `~/.md-viewer-server/`，與「無 root」的假設天生相容
+- daemon 執行期資料落在 XDG 標準目錄（見下一節），皆在使用者 home 目錄下，與「無 root」的假設天生相容
 - 更新版本：下載新版 tar.gz 解壓縮覆蓋，`stop` 舊的、`start` 新的，不透過 npm registry
 - 同時仍發佈到 npm registry，給網路暢通的環境用 `npx md-viewer-server` 直接執行
+
+## 執行期資料夾（XDG Base Directory）
+
+遵循 [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/latest/)，不引入額外 npm 套件，自行實作路徑解析（讀環境變數＋fallback，十餘行即可）：
+
+| 用途 | XDG 分類 | 路徑（含 fallback） |
+|---|---|---|
+| `config.json`（token/port/roots）、`css-presets.json` | Config | `$XDG_CONFIG_HOME/md-viewer-server/`，fallback `~/.config/md-viewer-server/` |
+| `server.pid`、`server.log` | State | `$XDG_STATE_HOME/md-viewer-server/`，fallback `~/.local/state/md-viewer-server/` |
+
+不使用 `$XDG_RUNTIME_DIR` 存放 pid 檔：該目錄不保證存在，且使用者登出即被清空，與 daemon 可能跨 session 長時間背景執行的性質不符，State 目錄更穩定。全新專案不考慮舊版路徑遷移。
 
 ## Daemon 生命週期管理
 
 CLI 指令：
 
 - `start --root <path> [--root <path2> ...] [--port 4173]`
-  1. 讀取/建立 `~/.md-viewer-server/config.json`（含固定 token、port、roots 清單）
+  1. 讀取/建立 XDG Config 目錄下的 `config.json`（含固定 token、port、roots 清單）
   2. 讀 `server.pid`，用 `process.kill(pid, 0)` 探測是否已有存活程序 → 有就印出現有連結與狀態、直接結束，**不重啟**
   3. 檢查每個 `--root` 是否存在且可讀；不存在/無權限的 root 略過並印警告，其餘 root 正常啟動（只要至少一個 root 有效）
   4. 檢查 port 是否被佔用；被佔用就印錯誤並結束，**不自動改用其他 port**（避免每次連結網址不一致）
@@ -68,6 +81,7 @@ CLI 指令：
 - `status`：讀 pid 檔並探活，活著就重印連結、root 清單、port；死了就印「未執行」
 - `stop`：對 pid 送 `SIGTERM`；收到訊號後 server 端 graceful shutdown（見下）；等待程序結束後清除 pid 檔
   - **Graceful shutdown**：停止接受新的 HTTP/WS 連線、對所有連線中的前端推播「伺服器即將關閉」事件（前端據此提示使用者存檔）、等待進行中的寫入請求完成（有逾時上限）、關閉 chokidar watcher、結束程序
+- `doctor [--fix]`：見「Doctor 健康檢查指令」章節
 
 ## 認證與安全性
 
@@ -102,6 +116,8 @@ CLI 指令：
 | `GET /api/asset?root=&path=` | 靜態資源（markdown/html 內引用的相對路徑圖片、影片等二進位內容），依副檔名決定 `Content-Type`；渲染時把文件內的相對路徑改寫成呼叫這支 API |
 | `GET /api/search?q=&target=name\|content\|both&scope=all\|open&regex=&openPaths=` | 搜尋。`scope=open` 時帶上目前已開啟分頁的路徑清單，只在這些檔案內搜尋 |
 | `GET /api/outline?root=&path=` | 回傳單篇文章的標題結構，供大綱側邊欄使用；大綱模式的「內文」搜尋直接在前端已載入的內容上做 |
+| `GET /api/css-presets` | 讀取自訂 CSS 範本清單 |
+| `POST /api/css-presets` | body `{name, css}`，新增一筆範本並寫回 `css-presets.json` |
 
 檔案不存在、無權限、寫入失敗等一律回傳 `{errorCode: "..."}` 這種結構化錯誤碼（不是英文字串），前端依照目前語言翻譯成對應訊息顯示；後端 `server.log` 一律記錄英文原始訊息。
 
@@ -204,7 +220,8 @@ CLI 指令：
 
 **自訂 CSS**
 - CSS 編輯器，即時套用，**只作用於文章渲染區域**，不影響側邊欄/分頁列等 App 其他 UI
-- 存在瀏覽器 `localStorage`，有「重設為預設值」按鈕
+- 目前編輯中的內容存在瀏覽器 `localStorage`，有「重設為預設值」按鈕
+- **範本清單**：範本存在後端 XDG Config 目錄下的 `css-presets.json`（`[{id, name, css}]`），不寫死在程式碼裡，使用者可持續累積自己的範本庫。首次啟動若檔案不存在，自動寫入兩個從 md-reader 移植的範本（`editorial` 編輯風格：米色背景＋大型 serif 標題；`developer` 開發者風格：深色終端機風程式碼區塊——選擇器改成本專案渲染容器的 class）。前端提供範本下拉選單套用，以及「另存為新範本」按鈕把目前編輯框內容寫回 `css-presets.json` 成新的一筆
 
 ### 快捷鍵
 
@@ -232,9 +249,26 @@ CLI 指令：
 - 多網卡環境下列出所有候選 IP 供使用者選擇正確的連結
 - `stop` 時 graceful shutdown：先廣播「即將關閉」事件讓前端提示存檔，再等待進行中請求完成（有逾時），才真正結束程序
 
+## Doctor 健康檢查指令
+
+`md-viewer-server doctor [--fix]`：參考 `npm doctor` / `brew doctor` / `flutter doctor` 的模式，條列檢查項目，每項顯示 `✓`／`✗`／`⚠`，失敗項附建議動作；部分項目支援 `--fix` 自動修復。
+
+檢查項目：
+
+1. Node.js 版本是否符合最低需求
+2. `bundle.js` 與前端靜態檔是否存在完整（離線安裝包解壓縮是否成功）
+3. XDG Config／State 目錄是否存在且可寫，不存在時 `--fix` 可直接建立
+4. `config.json` 是否存在、格式正確、token 是合法的 4 位數字
+5. 每個 root 路徑是否存在、可讀、可寫
+6. port 是否被佔用
+7. **stale pid 檢查**：`server.pid` 存在但對應程序已死 → 警告，`--fix` 自動清除該 pid 檔
+8. Linux inotify watch 上限檢查（讀 `/proc/sys/fs/inotify/max_user_watches`），root 底下檔案數接近或超過上限就警告（使用者可能沒有權限調整系統參數，只能提示排除大型子目錄或減少 root 數量）
+9. 若「傳送圖表原始碼到 PlantUML server」已開啟，檢查設定的 server 網址是否可連線
+10. XDG 目錄所在磁碟剩餘空間檢查，過低則警告
+
 ## 測試策略
 
-- **Unit**（Vitest）：後端純函式（token 產生、mtime 比對邏輯、副檔名過濾、路徑安全檢查、搜尋比對/regex 驗證）；前端純邏輯（i18n 格式化、tab 狀態 reducer、dirty 判斷）
+- **Unit**（Vitest）：後端純函式（token 產生、mtime 比對邏輯、副檔名過濾、路徑安全檢查、搜尋比對/regex 驗證、XDG 路徑解析含 fallback、doctor 各檢查項目的判斷邏輯）；前端純邏輯（i18n 格式化、tab 狀態 reducer、dirty 判斷）
 - **Integration**（Vitest + supertest 等）：REST API 端到端測試（含 409 衝突情境、多 root 檔案列表、`.bak` 備份行為、path traversal 防護、搜尋 API 各種 mode）；WebSocket 推播測試（改檔案 → 驗證收到對應事件）
 - **E2E**（Playwright）：完整使用情境 —— 帶 token 連線（含網址 token 清除行為）、開檔編輯存檔、模擬外部改檔觸發衝突對話框、搜尋各模式切換、側邊欄兩種模式切換、多 root 顯示、html sandbox 是否成功阻擋 script 存取 token、RWD 窄螢幕基本可用性
 

@@ -1,0 +1,29 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code when working in this repository.
+
+## Commit convention
+
+Commit at the granularity of one logical section/module per commit — do not batch unrelated sections into one commit. Every commit message must cover three parts, in this order:
+
+- **Why**: the motivation or problem this section addresses
+- **What**: what was added or changed
+- **How**: the approach/mechanism used
+
+Example:
+
+```
+Add token-based auth middleware
+
+Why: REST API and WebSocket need to reject unauthenticated LAN traffic
+without adding brute-force protection complexity (accepted risk for
+LAN-only deployment, see design spec).
+What: 4-digit token stored in config.json, checked via X-Auth-Token
+header for REST and query string for WS handshake.
+How: Express middleware compares header/query token against config
+value in constant time; WS upgrade handler checks token before accepting.
+```
+
+## Design spec
+
+See `docs/superpowers/specs/2026-09-05-md-viewer-server-design.md` for the full design.
