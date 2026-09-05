@@ -120,6 +120,7 @@ describe('dist/bundle.js (built artifact)', () => {
     const health = await waitForHealth(TEST_PORT + 1)
     expect(health.service).toBe('md-viewer-server')
     expect(health.roots).toEqual(['/tmp/project'])
+    expect(health.version).toMatch(/^\d+\.\d+\.\d+$/)
   })
 })
 

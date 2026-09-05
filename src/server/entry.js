@@ -10,8 +10,18 @@ import { createApp } from './app.js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 function readPackageVersion() {
-  const pkgPath = path.join(__dirname, '..', '..', 'package.json')
-  return JSON.parse(fs.readFileSync(pkgPath, 'utf8')).version
+  let dir = __dirname
+  for (let i = 0; i < 5; i++) {
+    const pkgPath = path.join(dir, 'package.json')
+    if (fs.existsSync(pkgPath)) {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+      if (pkg.name === 'md-viewer-server') return pkg.version
+    }
+    const parent = path.dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+  throw new Error('could not locate md-viewer-server package.json to read version')
 }
 
 export function startServer({ logLevel = 'info' } = {}) {

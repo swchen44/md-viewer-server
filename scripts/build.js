@@ -12,8 +12,13 @@ await build({
   format: 'esm',
   target: 'node18',
   outfile: path.join(root, 'dist', 'bundle.js'),
-  banner: { js: '#!/usr/bin/env node' },
-  external: ['express', 'pino'],
+  banner: {
+    js: [
+      '#!/usr/bin/env node',
+      "import { createRequire as __mvsCreateRequire } from 'node:module';",
+      'const require = __mvsCreateRequire(import.meta.url);',
+    ].join('\n'),
+  },
 })
 
 console.log('Built dist/bundle.js')
