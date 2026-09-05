@@ -5,6 +5,7 @@ import { createFilesRouter } from './api/files.js'
 import { createFileRouter } from './api/file.js'
 import { createRenameMkdirRouter } from './api/rename-mkdir.js'
 import { createAssetRouter } from './api/asset.js'
+import { createSearchRouter } from './api/search.js'
 
 export function createApp({
   config,
@@ -33,6 +34,7 @@ export function createApp({
   app.use('/api', authMiddleware, createFileRouter(roots))
   app.use('/api', authMiddleware, createRenameMkdirRouter(roots))
   app.use('/api', authMiddleware, createAssetRouter(roots))
+  app.use('/api', authMiddleware, createSearchRouter(roots, extensions))
 
   app.post('/api/shutdown', (req, res) => {
     const token = req.header('X-Auth-Token')
