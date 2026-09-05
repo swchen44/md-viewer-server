@@ -31,6 +31,11 @@ describe('config file management', () => {
     expect(readConfig(dir)).toBeNull()
   })
 
+  it('returns null instead of throwing when config.json is corrupt', () => {
+    fs.writeFileSync(getConfigPath(dir), '{not valid json')
+    expect(readConfig(dir)).toBeNull()
+  })
+
   it('creates a new config with a generated token on first call', () => {
     const config = loadOrCreateConfig(dir, { roots: ['/tmp/a'], port: 4173 })
     expect(config.token).toMatch(/^\d{4}$/)

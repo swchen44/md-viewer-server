@@ -56,6 +56,11 @@ export function startServer({ logLevel = 'info' } = {}) {
 
   process.on('SIGTERM', () => gracefulShutdown('signal'))
 
+  server.on('error', (err) => {
+    logger.error({ err: err.message, code: err.code }, 'server failed to start')
+    process.exit(1)
+  })
+
   server.listen(config.port, '0.0.0.0', () => {
     fs.writeFileSync(path.join(stateDir, 'server.pid'), String(process.pid))
     logger.info({ port: server.address().port }, 'server listening')

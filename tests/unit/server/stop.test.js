@@ -5,7 +5,7 @@ import path from 'node:path'
 import http from 'node:http'
 import { runStop } from '../../../src/server/commands/stop.js'
 import { loadOrCreateConfig } from '../../../src/server/config.js'
-import { getConfigDir } from '../../../src/server/xdg-paths.js'
+import { getConfigDir, getStateDir } from '../../../src/server/xdg-paths.js'
 
 describe('runStop', () => {
   let configHome
@@ -64,4 +64,36 @@ describe('runStop', () => {
 
     server.close()
   })
+
+  it('reports stop-failed and keeps the pid file when the server never actually goes down', async () => {
+    // Unlike the "stops via the shutdown API" test above, /api/health here
+    // keeps responding successfully even after /api/shutdown is called, so
+    // waitUntilStopped's default polling window (30 retries * 100ms = up to
+    // 3s) is exhausted without ever observing the server go down. This test
+    // intentionally runs that full window rather than overriding it, since
+    // runStop() does not expose waitUntilStopped's retry/interval knobs.
+    const server = http.createServer((req, res) => {
+      res.setHeader('Content-Type', 'application/json; charset=utf-8')
+      if (req.url === '/api/health') {
+        res.end(
+          JSON.stringify({ service: 'md-viewer-server', version: '0.1.0', uptime: 1, roots: [] })
+        )
+      } else if (req.url === '/api/shutdown' && req.method === 'POST') {
+        res.end(JSON.stringify({ status: 'shutting-down' }))
+      }
+    })
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const port = server.address().port
+    loadOrCreateConfig(getConfigDir(), { roots: ['/tmp/a'], port })
+
+    const pidPath = path.join(getStateDir(), 'server.pid')
+    fs.mkdirSync(getStateDir(), { recursive: true })
+    fs.writeFileSync(pidPath, '999999')
+
+    const result = await runStop()
+    expect(result).toEqual({ outcome: 'stop-failed' })
+    expect(fs.existsSync(pidPath)).toBe(true)
+
+    server.close()
+  }, 10000)
 })

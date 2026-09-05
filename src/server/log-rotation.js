@@ -10,11 +10,7 @@ export function createRotatingStream(filePath, { maxBytes = 10 * 1024 * 1024, ma
       const src = `${filePath}.${i}`
       if (fs.existsSync(src)) {
         const dest = `${filePath}.${i + 1}`
-        if (i + 1 > maxFiles) {
-          fs.unlinkSync(src)
-        } else {
-          fs.renameSync(src, dest)
-        }
+        fs.renameSync(src, dest)
       }
     }
     fs.renameSync(filePath, `${filePath}.1`)

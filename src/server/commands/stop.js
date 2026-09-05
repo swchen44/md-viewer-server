@@ -30,19 +30,26 @@ export async function runStop() {
   }
 
   if (apiCallSucceeded) {
-    await waitUntilStopped(config.port)
-    cleanupPidFile(pidPath)
-    return { outcome: 'stopped', via: 'api' }
+    const stopped = await waitUntilStopped(config.port)
+    if (stopped) {
+      cleanupPidFile(pidPath)
+      return { outcome: 'stopped', via: 'api' }
+    }
+    return { outcome: 'stop-failed' }
   }
 
   if (fs.existsSync(pidPath)) {
     const pid = Number(fs.readFileSync(pidPath, 'utf8').trim())
     try {
       process.kill(pid, 'SIGTERM')
-      await waitUntilStopped(config.port)
-      cleanupPidFile(pidPath)
-      return { outcome: 'stopped', via: 'signal' }
+      const stopped = await waitUntilStopped(config.port)
+      if (stopped) {
+        cleanupPidFile(pidPath)
+        return { outcome: 'stopped', via: 'signal' }
+      }
+      return { outcome: 'stop-failed' }
     } catch {
+      cleanupPidFile(pidPath)
       return { outcome: 'stop-failed' }
     }
   }

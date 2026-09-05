@@ -13,7 +13,11 @@ export function getConfigPath(configDir) {
 export function readConfig(configDir) {
   const configPath = getConfigPath(configDir)
   if (!fs.existsSync(configPath)) return null
-  return JSON.parse(fs.readFileSync(configPath, 'utf8'))
+  try {
+    return JSON.parse(fs.readFileSync(configPath, 'utf8'))
+  } catch {
+    return null
+  }
 }
 
 export function loadOrCreateConfig(configDir, { roots, port }) {
