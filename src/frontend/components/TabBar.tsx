@@ -1,10 +1,6 @@
-export interface Tab {
-  id: string
-  rootId: number
-  relPath: string
-  title: string
-  dirty: boolean
-}
+import type { Tab } from '../types.js'
+
+export type { Tab }
 
 interface TabBarProps {
   tabs: Tab[]

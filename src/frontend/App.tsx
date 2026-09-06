@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { apiFetch } from './api-client.js'
 import { TopBar } from './components/TopBar.js'
-import { TabBar, type Tab } from './components/TabBar.js'
+import { TabBar } from './components/TabBar.js'
+import type { Tab } from './types.js'
 import { Sidebar, type SidebarMode } from './components/Sidebar.js'
 import { FileTreePanel, type FileSearchResults } from './components/FileTreePanel.js'
 import { OutlinePanel, type HeadingFilter } from './components/OutlinePanel.js'
@@ -93,7 +94,10 @@ export function App() {
     }
     const id = `${rootId}:${relPath}`
     const title = relPath.split('/').pop() ?? relPath
-    setTabs((prev) => [...prev, { id, rootId, relPath, title, dirty: false }])
+    setTabs((prev) => [
+      ...prev,
+      { id, rootId, relPath, title, dirty: false, content: null, mtimeMs: null, encoding: 'utf-8', mode: 'view' },
+    ])
     setActiveTabId(id)
   }
 
