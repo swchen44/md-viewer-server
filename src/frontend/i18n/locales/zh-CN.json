@@ -40,7 +40,19 @@
     "dialogTitle": "设置",
     "generalTab": "通用",
     "appearanceTab": "外观",
-    "customCssTab": "自定义 CSS"
+    "customCssTab": "自定义 CSS",
+    "language": "语言",
+    "renderTxtAsMarkdown": "将 .txt 文件以 Markdown 渲染",
+    "showHiddenFiles": "显示隐藏文件",
+    "outlineCollapsed": "大纲面板默认折叠",
+    "charsetCompatMode": "编码兼容模式(强制以 UTF-8 重新解码)",
+    "autoReload": "文件变更时自动重新加载查看中的标签页",
+    "bakOnSave": "保存时创建 .bak 备份文件",
+    "privacyModeLabel": "隐私模式",
+    "blockRemoteContent": "阻止文档中的远程图片/视频/iframe",
+    "plantumlServerUrl": "PlantUML 服务器地址",
+    "sendToPlantUmlServer": "将图表源码发送到 PlantUML 服务器",
+    "allowHtmlScripts": "允许 HTML 文件执行脚本"
   },
   "topBar": {
     "settingsLabel": "设置"

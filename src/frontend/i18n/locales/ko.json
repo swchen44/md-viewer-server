@@ -40,7 +40,19 @@
     "dialogTitle": "설정",
     "generalTab": "일반",
     "appearanceTab": "화면",
-    "customCssTab": "사용자 지정 CSS"
+    "customCssTab": "사용자 지정 CSS",
+    "language": "언어",
+    "renderTxtAsMarkdown": ".txt 파일을 Markdown으로 렌더링",
+    "showHiddenFiles": "숨김 파일 표시",
+    "outlineCollapsed": "개요 패널을 기본적으로 접기",
+    "charsetCompatMode": "문자 인코딩 호환 모드(UTF-8로 강제 재디코딩)",
+    "autoReload": "파일 변경 시 보고 있는 탭 자동 새로고침",
+    "bakOnSave": "저장 시 .bak 백업 파일 생성",
+    "privacyModeLabel": "개인정보 보호 모드",
+    "blockRemoteContent": "문서 내 원격 이미지/동영상/iframe 차단",
+    "plantumlServerUrl": "PlantUML 서버 URL",
+    "sendToPlantUmlServer": "다이어그램 소스를 PlantUML 서버로 전송",
+    "allowHtmlScripts": "HTML 파일의 스크립트 실행 허용"
   },
   "topBar": {
     "settingsLabel": "설정"

@@ -40,7 +40,19 @@
     "dialogTitle": "設定",
     "generalTab": "一般",
     "appearanceTab": "外觀",
-    "customCssTab": "自訂 CSS"
+    "customCssTab": "自訂 CSS",
+    "language": "語言",
+    "renderTxtAsMarkdown": "將 .txt 檔案以 Markdown 呈現",
+    "showHiddenFiles": "顯示隱藏檔案",
+    "outlineCollapsed": "大綱面板預設收合",
+    "charsetCompatMode": "編碼相容模式(強制以 UTF-8 重新解碼)",
+    "autoReload": "檔案變更時自動重新載入檢視中的分頁",
+    "bakOnSave": "儲存時建立 .bak 備份檔",
+    "privacyModeLabel": "隱私模式",
+    "blockRemoteContent": "封鎖文件中的遠端圖片/影片/iframe",
+    "plantumlServerUrl": "PlantUML 伺服器網址",
+    "sendToPlantUmlServer": "將圖表原始碼傳送至 PlantUML 伺服器",
+    "allowHtmlScripts": "允許 HTML 檔案執行指令碼"
   },
   "topBar": {
     "settingsLabel": "設定"

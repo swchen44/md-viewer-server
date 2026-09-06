@@ -40,7 +40,19 @@
     "dialogTitle": "設定",
     "generalTab": "一般",
     "appearanceTab": "外観",
-    "customCssTab": "カスタム CSS"
+    "customCssTab": "カスタム CSS",
+    "language": "言語",
+    "renderTxtAsMarkdown": ".txt ファイルを Markdown として表示",
+    "showHiddenFiles": "隠しファイルを表示",
+    "outlineCollapsed": "アウトラインパネルを既定で折りたたむ",
+    "charsetCompatMode": "文字コード互換モード(UTF-8での再デコードを強制)",
+    "autoReload": "ファイル変更時に表示中のタブを自動再読み込み",
+    "bakOnSave": "保存時に .bak バックアップを作成",
+    "privacyModeLabel": "プライバシーモード",
+    "blockRemoteContent": "文書内のリモート画像/動画/iframeをブロック",
+    "plantumlServerUrl": "PlantUML サーバー URL",
+    "sendToPlantUmlServer": "図の元データを PlantUML サーバーに送信",
+    "allowHtmlScripts": "HTML ファイルでのスクリプト実行を許可"
   },
   "topBar": {
     "settingsLabel": "設定"

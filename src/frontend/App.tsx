@@ -12,6 +12,8 @@ import { TabContent } from './components/TabContent.js'
 import { ConflictDialog } from './components/ConflictDialog.js'
 import { SettingsModal } from './components/SettingsModal.js'
 import { useDraft } from './hooks/useDraft.js'
+import { useSettings } from './hooks/useSettings.js'
+import { useLocalPrefs } from './hooks/useLocalPrefs.js'
 
 interface Conflict {
   tabId: string
@@ -54,6 +56,8 @@ export function App() {
   const [conflict, setConflict] = useState<Conflict | null>(null)
   const [saveError, setSaveError] = useState<SaveError | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const { settings, updateSettings } = useSettings()
+  const { prefs, setPref } = useLocalPrefs()
   // Guards against a stale /api/search response (issued per-root, then merged)
   // overwriting newer state if the user changes/clears the query before an
   // earlier request finishes — only the most recently issued search may apply.
@@ -477,7 +481,14 @@ export function App() {
   return (
     <div data-testid="app-shell" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <TopBar onOpenSettings={() => setSettingsOpen(true)} />
-      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        settings={settings}
+        updateSettings={updateSettings}
+        prefs={prefs}
+        setPref={setPref}
+      />
       {rootsError && (
         <div data-testid="roots-error" role="alert" style={{ padding: '4px 12px', color: '#b00020' }}>
           {rootsError}

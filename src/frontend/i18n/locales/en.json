@@ -40,7 +40,19 @@
     "dialogTitle": "Settings",
     "generalTab": "General",
     "appearanceTab": "Appearance",
-    "customCssTab": "Custom CSS"
+    "customCssTab": "Custom CSS",
+    "language": "Language",
+    "renderTxtAsMarkdown": "Render .txt files as Markdown",
+    "showHiddenFiles": "Show hidden files",
+    "outlineCollapsed": "Outline panel collapsed by default",
+    "charsetCompatMode": "Charset compatibility mode (force UTF-8 redecoding)",
+    "autoReload": "Auto-reload viewing tabs on file change",
+    "bakOnSave": "Create .bak backup on save",
+    "privacyModeLabel": "Privacy mode",
+    "blockRemoteContent": "Block remote images/videos/iframes in documents",
+    "plantumlServerUrl": "PlantUML server URL",
+    "sendToPlantUmlServer": "Send diagram source to PlantUML server",
+    "allowHtmlScripts": "Allow HTML files to execute scripts"
   },
   "topBar": {
     "settingsLabel": "Settings"

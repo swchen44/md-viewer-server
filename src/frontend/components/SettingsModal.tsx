@@ -1,14 +1,28 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import type { Settings } from '../hooks/useSettings.js'
+import { DEFAULT_LOCAL_PREFS, type LocalPrefs } from '../hooks/useLocalPrefs.js'
+import { GeneralTab } from './settings/GeneralTab.js'
 
 type Category = 'general' | 'appearance' | 'customCss'
 
 interface SettingsModalProps {
   open: boolean
   onClose: () => void
+  settings?: Settings | null
+  updateSettings?: (patch: Partial<Settings>) => void | Promise<void>
+  prefs?: LocalPrefs
+  setPref?: <K extends keyof LocalPrefs>(key: K, value: LocalPrefs[K]) => void
 }
 
-export function SettingsModal({ open, onClose }: SettingsModalProps) {
+export function SettingsModal({
+  open,
+  onClose,
+  settings = null,
+  updateSettings = () => {},
+  prefs = DEFAULT_LOCAL_PREFS,
+  setPref = () => {},
+}: SettingsModalProps) {
   const { t } = useTranslation()
   const [category, setCategory] = useState<Category>('general')
 
@@ -28,7 +42,10 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
         </button>
       </nav>
       <div data-testid="settings-tab-content">
-        {/* Task 6/7/8 replace this with GeneralTab/AppearanceTab/CustomCssTab based on `category` */}
+        {category === 'general' && (
+          <GeneralTab settings={settings} updateSettings={updateSettings} prefs={prefs} setPref={setPref} />
+        )}
+        {/* Task 7/8 replace this with AppearanceTab/CustomCssTab based on `category` */}
       </div>
       <button aria-label="close" onClick={onClose}>
         ×
