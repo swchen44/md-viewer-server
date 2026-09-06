@@ -22,6 +22,7 @@ export default [
         AbortSignal: 'readonly',
         TextDecoder: 'readonly',
         URL: 'readonly',
+        URLSearchParams: 'readonly',
         __MVS_BUNDLED_VERSION__: 'readonly',
       },
     },

@@ -14,6 +14,15 @@ function findRoot(roots, rootId) {
   return roots.find((r) => r.id === Number(rootId))
 }
 
+// Normalizes the `openPaths` query param to a flat array of path strings no
+// matter which shape the configured query parser produced it in.
+function normalizeOpenPaths(openPaths) {
+  if (openPaths === undefined) return []
+  if (Array.isArray(openPaths)) return openPaths
+  if (typeof openPaths === 'object' && openPaths !== null) return Object.values(openPaths)
+  return [openPaths]
+}
+
 export function createSearchRouter(roots, extensions) {
   const router = express.Router()
 
@@ -33,14 +42,18 @@ export function createSearchRouter(roots, extensions) {
     let files = listFiles(root.path, extensions)
     if (scope === 'open') {
       // openPaths arrives as `undefined` (no open tabs), a single string (one
-      // open tab), or an array (multiple open tabs) depending on how many
-      // `openPaths=...` query params the client sent — Express's default
-      // ('extended'/qs) query parser turns repeated keys into an array
-      // automatically. Repeated params (rather than one comma-joined value)
-      // is deliberate: POSIX filenames can legally contain a literal comma,
-      // which a join/split round-trip would silently corrupt.
-      const openList = Array.isArray(openPaths) ? openPaths : openPaths ? [openPaths] : []
-      const openSet = new Set(openList.map((p) => String(p)))
+      // open tab), an array (multiple open tabs, up to whatever arrayLimit
+      // the configured query parser allows), or — once the number of
+      // repeated `openPaths=...` params exceeds that arrayLimit — a plain
+      // object keyed by index (qs's overflow behavior: index 0, 1, 2, ...
+      // instead of continuing the array). Repeated params (rather than one
+      // comma-joined value) is deliberate: POSIX filenames can legally
+      // contain a literal comma, which a join/split round-trip would
+      // silently corrupt. normalizeOpenPaths below flattens all of these
+      // shapes to a plain array so a large number of open tabs is handled
+      // correctly regardless of the parser's arrayLimit, rather than assuming
+      // a value past the limit will always look like an array.
+      const openSet = new Set(normalizeOpenPaths(openPaths).map((p) => String(p)))
       files = files.filter((f) => openSet.has(f.relPath))
     }
 
