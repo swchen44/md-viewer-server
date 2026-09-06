@@ -17,5 +17,11 @@
   "outline": {
     "noFileOpen": "No file open",
     "loadError": "Failed to load outline"
+  },
+  "conflictDialog": {
+    "ariaLabel": "File conflict",
+    "message": "This file was modified externally while you were editing it.",
+    "keepMine": "Keep mine and overwrite",
+    "discardMine": "Discard mine, reload latest"
   }
 }

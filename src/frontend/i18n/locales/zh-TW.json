@@ -17,5 +17,11 @@
   "outline": {
     "noFileOpen": "尚未開啟檔案",
     "loadError": "大綱載入失敗"
+  },
+  "conflictDialog": {
+    "ariaLabel": "檔案衝突",
+    "message": "在您編輯期間,這個檔案已被外部修改。",
+    "keepMine": "保留我的修改並覆蓋",
+    "discardMine": "捨棄我的修改,重新載入最新版本"
   }
 }

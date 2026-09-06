@@ -17,5 +17,11 @@
   "outline": {
     "noFileOpen": "尚未打开文件",
     "loadError": "大纲加载失败"
+  },
+  "conflictDialog": {
+    "ariaLabel": "文件冲突",
+    "message": "在您编辑期间,此文件已被外部修改。",
+    "keepMine": "保留我的修改并覆盖",
+    "discardMine": "放弃我的修改,重新载入最新版本"
   }
 }

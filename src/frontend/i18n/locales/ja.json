@@ -17,5 +17,11 @@
   "outline": {
     "noFileOpen": "ファイルが開かれていません",
     "loadError": "アウトラインの読み込みに失敗しました"
+  },
+  "conflictDialog": {
+    "ariaLabel": "ファイルの競合",
+    "message": "編集中にこのファイルが外部で変更されました。",
+    "keepMine": "自分の変更を保持して上書き",
+    "discardMine": "自分の変更を破棄して最新を読み込む"
   }
 }

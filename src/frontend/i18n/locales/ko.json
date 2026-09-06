@@ -17,5 +17,11 @@
   "outline": {
     "noFileOpen": "열린 파일 없음",
     "loadError": "개요를 불러오지 못했습니다"
+  },
+  "conflictDialog": {
+    "ariaLabel": "파일 충돌",
+    "message": "편집하는 동안 이 파일이 외부에서 수정되었습니다.",
+    "keepMine": "내 변경사항 유지하고 덮어쓰기",
+    "discardMine": "내 변경사항 버리고 최신 내용 불러오기"
   }
 }

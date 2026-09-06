@@ -1,8 +1,17 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { ConflictDialog } from '../../src/frontend/components/ConflictDialog.js'
+import en from '../../src/frontend/i18n/locales/en.json'
 
 describe('ConflictDialog', () => {
+  it('routes every user-facing string through i18n keys (5-language requirement)', () => {
+    render(<ConflictDialog currentContent="x" onKeepMine={() => {}} onDiscardMine={() => {}} />)
+    expect(screen.getByRole('dialog')).toHaveAccessibleName(en.conflictDialog.ariaLabel)
+    expect(screen.getByText(en.conflictDialog.message)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: en.conflictDialog.keepMine })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: en.conflictDialog.discardMine })).toBeInTheDocument()
+  })
+
   it('shows the current (external) content for reference', () => {
     render(
       <ConflictDialog currentContent="external version" onKeepMine={() => {}} onDiscardMine={() => {}} />
