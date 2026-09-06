@@ -12,6 +12,7 @@
     "scopeOpen": "已開啟分頁"
   },
   "outline": {
-    "noFileOpen": "尚未開啟檔案"
+    "noFileOpen": "尚未開啟檔案",
+    "loadError": "大綱載入失敗"
   }
 }

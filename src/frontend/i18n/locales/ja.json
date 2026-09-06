@@ -12,6 +12,7 @@
     "scopeOpen": "開いているタブ"
   },
   "outline": {
-    "noFileOpen": "ファイルが開かれていません"
+    "noFileOpen": "ファイルが開かれていません",
+    "loadError": "アウトラインの読み込みに失敗しました"
   }
 }

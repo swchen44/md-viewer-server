@@ -12,6 +12,7 @@
     "scopeOpen": "열린 탭"
   },
   "outline": {
-    "noFileOpen": "열린 파일 없음"
+    "noFileOpen": "열린 파일 없음",
+    "loadError": "개요를 불러오지 못했습니다"
   }
 }

@@ -12,6 +12,7 @@
     "scopeOpen": "已打开标签"
   },
   "outline": {
-    "noFileOpen": "尚未打开文件"
+    "noFileOpen": "尚未打开文件",
+    "loadError": "大纲加载失败"
   }
 }

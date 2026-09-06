@@ -12,6 +12,7 @@
     "scopeOpen": "Open tabs"
   },
   "outline": {
-    "noFileOpen": "No file open"
+    "noFileOpen": "No file open",
+    "loadError": "Failed to load outline"
   }
 }
