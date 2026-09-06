@@ -72,4 +72,29 @@ describe('SearchBar', () => {
     expect(screen.getByText(/^content$/i)).toBeInTheDocument()
     expect(screen.getByText(/^both$/i)).toBeInTheDocument()
   })
+
+  it('resets target to a mode-valid value when rerendered in place from files to outline', () => {
+    vi.useFakeTimers()
+    const onSearch = vi.fn()
+    const { rerender } = render(<SearchBar mode="files" onSearch={onSearch} />)
+    fireEvent.click(screen.getByText(/^content$/i))
+
+    rerender(<SearchBar mode="outline" onSearch={onSearch} />)
+    fireEvent.change(screen.getByPlaceholderText(/search/i), { target: { value: 'sec' } })
+    vi.advanceTimersByTime(300)
+
+    expect(onSearch).toHaveBeenCalledWith('sec', { target: 'title', regex: false })
+  })
+
+  it('resets target to a mode-valid value when rerendered in place from outline to files', () => {
+    vi.useFakeTimers()
+    const onSearch = vi.fn()
+    const { rerender } = render(<SearchBar mode="outline" onSearch={onSearch} />)
+
+    rerender(<SearchBar mode="files" onSearch={onSearch} />)
+    fireEvent.change(screen.getByPlaceholderText(/search/i), { target: { value: 'sec' } })
+    vi.advanceTimersByTime(300)
+
+    expect(onSearch).toHaveBeenCalledWith('sec', { target: 'both', scope: 'all', regex: false })
+  })
 })

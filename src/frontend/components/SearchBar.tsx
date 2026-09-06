@@ -63,6 +63,21 @@ export function SearchBar(props: SearchBarProps) {
     latestPropsRef.current = props
   })
 
+  // SearchBar is rerendered in place (not remounted) when App.tsx swaps which
+  // mode's instance is shown for a given sidebar slot, so `target`'s useState
+  // initializer above only runs once and never re-derives for the new mode.
+  // Adjust state during render (React's documented pattern for resetting
+  // state when a prop changes, already used the same way in OutlinePanel.tsx)
+  // rather than in an effect, which this repo's react-hooks/set-state-in-effect
+  // lint rule flags. Without this, switching sidebar modes carries over a
+  // target value that's invalid for the new mode (e.g. files' 'both'
+  // surviving into outline mode, which only supports 'title').
+  const [prevMode, setPrevMode] = useState(mode)
+  if (prevMode !== mode) {
+    setPrevMode(mode)
+    setTarget(mode === 'outline' ? 'title' : 'both')
+  }
+
   useEffect(() => {
     clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
