@@ -21,6 +21,19 @@ interface Conflict {
 export function App() {
   const { t } = useTranslation()
   const [tabs, setTabs] = useState<Tab[]>([])
+  // handleSave needs to check, once its PUT response comes back, whether the
+  // tab's content is still what was actually sent — but by then the `tabs`
+  // closed over at the top of handleSave (captured when the save started) is
+  // stale if the user kept typing in the meantime. A setTabs *updater*
+  // callback would see fresh state, but React doesn't run it synchronously,
+  // so a variable assigned inside one can't be read right after the
+  // setTabs(...) call either. Mirror `tabs` into a ref (kept current via
+  // effect, not during render — see react-hooks/refs) so handleSave can read
+  // the true latest content synchronously at any time.
+  const tabsRef = useRef<Tab[]>(tabs)
+  useEffect(() => {
+    tabsRef.current = tabs
+  }, [tabs])
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('files')
   const [roots, setRoots] = useState<Array<{ id: number; name: string }>>([])
@@ -141,11 +154,31 @@ export function App() {
   async function handleSave(tabId: string) {
     const tab = tabs.find((t) => t.id === tabId)
     if (!tab) return
+    const contentAtSaveTime = tab.content
     const res = await putFile(tab, false)
     if (res.ok) {
       const data = await res.json()
-      setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, mtimeMs: data.mtimeMs, dirty: false } : t)))
-      clearDraft()
+      // The user may have kept typing while this PUT was in flight — compare
+      // against tabsRef (the true latest content) rather than the `tab`
+      // closed over above, which is a snapshot from when the save started.
+      // If content changed during the save, this is a legitimate race: only
+      // the mtimeMs is safe to adopt from the response. Marking dirty:false
+      // or clearing the draft here would falsely report the newer,
+      // still-unsaved edits as saved and delete their only recovery copy.
+      const currentTab = tabsRef.current.find((t) => t.id === tabId)
+      const contentUnchangedDuringSave = currentTab?.content === contentAtSaveTime
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.id === tabId
+            ? contentUnchangedDuringSave
+              ? { ...t, mtimeMs: data.mtimeMs, dirty: false }
+              : { ...t, mtimeMs: data.mtimeMs }
+            : t
+        )
+      )
+      if (contentUnchangedDuringSave) {
+        clearDraft()
+      }
       return
     }
     if (res.status === 409) {

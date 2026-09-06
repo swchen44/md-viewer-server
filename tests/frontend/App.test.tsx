@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { App } from '../../src/frontend/App.js'
 
 function stubRootsFetch() {
@@ -482,6 +482,58 @@ describe('App main content, save, draft, and conflict wiring', () => {
     expect(String(putUrl)).toContain('root=0')
     expect(String(putUrl)).toContain('path=a.md')
     expect(JSON.parse((putOptions as RequestInit).body as string)).toEqual({ content: '# Hi edited', mtimeMs: 1 })
+  })
+
+  it('keeps the tab dirty and preserves the newer draft when the user edits again while a save PUT is still in flight', async () => {
+    let resolvePut: (res: Response) => void
+    const putPromise = new Promise<Response>((resolve) => {
+      resolvePut = resolve
+    })
+    const fetchMock = vi.fn().mockImplementation((url: string, options?: RequestInit) => {
+      if (url.includes('/api/roots')) return Promise.resolve(jsonResponse([{ id: 0, name: 'proj' }]))
+      if (url.includes('/api/files'))
+        return Promise.resolve(jsonResponse({ files: [{ relPath: 'a.md', size: 5, mtimeMs: 1 }] }))
+      if (options?.method === 'PUT') return putPromise
+      if (url.includes('/api/file?')) return Promise.resolve(jsonResponse({ content: '# Hi', mtimeMs: 1, encoding: 'utf-8' }))
+      return Promise.resolve(jsonResponse({}))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+    await waitFor(() => screen.getByText('a.md'))
+    fireEvent.click(screen.getByText('a.md'))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Hi' })).toBeInTheDocument())
+    fireEvent.click(screen.getByTestId('mode-edit'))
+    const textarea = await findEditorTextarea()
+
+    // Edit #1, then Ctrl+S — this is the PUT that stays in flight (deferred).
+    fireEvent.change(textarea, { target: { value: '# Hi edited' } })
+    fireEvent.keyDown(textarea, { key: 's', ctrlKey: true })
+
+    // Edit #2 happens *while* the PUT for edit #1 is still pending — the user
+    // kept typing before the save round-trip completed.
+    fireEvent.change(textarea, { target: { value: '# Hi edited more' } })
+    expect(localStorage.getItem('mvs-draft:0:a.md')).toBe('# Hi edited more')
+
+    // Now let the in-flight PUT (which only ever carried "# Hi edited") succeed.
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(([, opts]) => (opts as RequestInit | undefined)?.method === 'PUT')).toBe(true)
+    )
+    await act(async () => {
+      resolvePut!(jsonResponse({ mtimeMs: 42 }))
+      // Flush the microtask chain inside handleSave's success branch
+      // (await res.json() -> setTabs -> clearDraft) past a real macrotask
+      // boundary so it has definitely run before we assert below.
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    // The content that was actually PUT ("# Hi edited") is stale — the tab now
+    // holds "# Hi edited more", which was never sent to the server. The tab
+    // must still read as dirty, and the draft (the only copy of "more") must
+    // NOT have been deleted, or a crash right now loses those keystrokes for
+    // good.
+    expect(screen.getByTestId('tab-bar').textContent).toContain('●')
+    expect(localStorage.getItem('mvs-draft:0:a.md')).toBe('# Hi edited more')
   })
 
   it('shows ConflictDialog on a 409 save response and force-overwrites when Keep Mine is chosen', async () => {
