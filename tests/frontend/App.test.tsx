@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { App } from '../../src/frontend/App.js'
 
 function stubRootsFetch() {
@@ -46,6 +46,27 @@ describe('App layout', () => {
     expect(screen.getByTestId('sidebar')).toHaveAttribute('data-mode', 'files')
     fireEvent.click(outlineButton)
     expect(screen.getByTestId('sidebar')).toHaveAttribute('data-mode', 'outline')
+  })
+})
+
+describe('App roots error handling', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('renders without crashing and keeps roots empty when GET /api/roots returns 401', async () => {
+    stubRoutedFetch([{ match: '/api/roots', response: { errorCode: 'UNAUTHORIZED' }, status: 401 }])
+    render(<App />)
+    expect(screen.getByTestId('app-shell')).toBeInTheDocument()
+
+    // Let the (401) /api/roots response resolve and propagate through state.
+    // The original bug set `roots` to the error body object itself, which made
+    // FileTreePanel's `roots.map(...)` throw during render and — with no Error
+    // Boundary in place yet — unmount the entire app. So "the shell/file tree
+    // panel are still in the DOM" is the crash check; a regression here would
+    // make these `getByTestId` calls throw a "unable to find element" error.
+    await waitFor(() => expect(screen.getByTestId('roots-error')).toBeInTheDocument())
+    expect(screen.getByTestId('app-shell')).toBeInTheDocument()
+    expect(screen.getByTestId('file-tree-panel')).toBeInTheDocument()
+    expect(screen.getByTestId('file-tree-panel').querySelectorAll('[style*="cursor: pointer"]')).toHaveLength(0)
   })
 })
 

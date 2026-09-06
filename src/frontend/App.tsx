@@ -12,6 +12,7 @@ export function App() {
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('files')
   const [roots, setRoots] = useState<Array<{ id: number; name: string }>>([])
+  const [rootsError, setRootsError] = useState<string | null>(null)
   const [fileSearchResults, setFileSearchResults] = useState<FileSearchResults | null>(null)
   const [outlineSearchFilter, setOutlineSearchFilter] = useState<HeadingFilter | null>(null)
   // Guards against a stale /api/search response (issued per-root, then merged)
@@ -21,8 +22,41 @@ export function App() {
 
   useEffect(() => {
     apiFetch('/api/roots')
-      .then((res) => res.json())
-      .then(setRoots)
+      .then(async (res) => {
+        if (!res.ok) {
+          // A non-ok response here (401 UNAUTHORIZED on first load, on a manually
+          // navigated URL with no/stale token, or after --rotate-token leaves the
+          // browser holding an old token) must NOT be treated as the roots array —
+          // doing so used to crash the whole app: `roots` became the error body
+          // object, and FileTreePanel's `roots.map(...)` threw with no Error
+          // Boundary in place to contain it. Keep roots empty (same safe/renderable
+          // state as a fresh install with zero configured roots) and surface a
+          // visible, testable indicator instead.
+          let errorCode: string | undefined
+          try {
+            const body = await res.json()
+            errorCode = body?.errorCode
+          } catch {
+            // Non-JSON body — fall through with errorCode left undefined.
+          }
+          console.error('Failed to load /api/roots', res.status, errorCode)
+          setRoots([])
+          setRootsError(
+            errorCode === 'UNAUTHORIZED'
+              ? 'Not authorized — check your access token.'
+              : 'Failed to load folders.'
+          )
+          return
+        }
+        const data = await res.json()
+        setRoots(data)
+        setRootsError(null)
+      })
+      .catch((err) => {
+        console.error('Failed to load /api/roots', err)
+        setRoots([])
+        setRootsError('Failed to load folders.')
+      })
   }, [])
 
   function closeTab(id: string) {
@@ -136,6 +170,11 @@ export function App() {
   return (
     <div data-testid="app-shell" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <TopBar />
+      {rootsError && (
+        <div data-testid="roots-error" role="alert" style={{ padding: '4px 12px', color: '#b00020' }}>
+          {rootsError}
+        </div>
+      )}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         <Sidebar mode={sidebarMode} onModeChange={setSidebarMode}>
           {sidebarMode === 'files' && (
