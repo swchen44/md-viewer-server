@@ -27,5 +27,10 @@
   "tabContent": {
     "loading": "読み込み中...",
     "loadError": "このファイルの読み込みに失敗しました"
+  },
+  "modeToggle": {
+    "view": "表示",
+    "edit": "編集",
+    "split": "分割"
   }
 }

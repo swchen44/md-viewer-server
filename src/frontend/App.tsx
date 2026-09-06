@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { apiFetch } from './api-client.js'
 import { TopBar } from './components/TopBar.js'
 import { TabBar } from './components/TabBar.js'
@@ -7,8 +8,18 @@ import { Sidebar, type SidebarMode } from './components/Sidebar.js'
 import { FileTreePanel, type FileSearchResults } from './components/FileTreePanel.js'
 import { OutlinePanel, type HeadingFilter } from './components/OutlinePanel.js'
 import { SearchBar, type FilesSearchOptions, type OutlineSearchOptions } from './components/SearchBar.js'
+import { TabContent } from './components/TabContent.js'
+import { ConflictDialog } from './components/ConflictDialog.js'
+import { useDraft } from './hooks/useDraft.js'
+
+interface Conflict {
+  tabId: string
+  currentContent: string
+  currentMtimeMs: number
+}
 
 export function App() {
+  const { t } = useTranslation()
   const [tabs, setTabs] = useState<Tab[]>([])
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('files')
@@ -16,6 +27,7 @@ export function App() {
   const [rootsError, setRootsError] = useState<string | null>(null)
   const [fileSearchResults, setFileSearchResults] = useState<FileSearchResults | null>(null)
   const [outlineSearchFilter, setOutlineSearchFilter] = useState<HeadingFilter | null>(null)
+  const [conflict, setConflict] = useState<Conflict | null>(null)
   // Guards against a stale /api/search response (issued per-root, then merged)
   // overwriting newer state if the user changes/clears the query before an
   // earlier request finishes — only the most recently issued search may apply.
@@ -79,6 +91,99 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeTab?.rootId, activeTab?.relPath]
   )
+
+  // useDraft must be called unconditionally on every render (rules of hooks), but
+  // its whole point is per-file draft state — so it's called here with whichever
+  // tab is currently active, falling back to sentinel values (0, '') when there is
+  // none. useDraft's own key-reset-on-rerender behavior (see its Task 1 fix) means
+  // this is safe even though `activeTab` changes identity across renders: the hook
+  // treats a change to (rootId, relPath) as "load the draft for the new key," not
+  // as a fresh mount. handleContentLoaded/handleChange/handleSave below are plain
+  // functions redefined every render, so they always close over the `draft`/
+  // `saveDraft`/`clearDraft` that correspond to the SAME render's `activeTab` —
+  // that pairing is what keeps a save/draft operation from ever acting on the
+  // wrong file, even if the active tab changes before an async call resolves.
+  const { draft, saveDraft, clearDraft } = useDraft(activeTab?.rootId ?? 0, activeTab?.relPath ?? '')
+
+  function handleContentLoaded(tabId: string, content: string, mtimeMs: number, encoding: 'utf-8' | 'unknown') {
+    // A crash-recovered draft (saved to localStorage but never successfully
+    // sent to the server) must win over the just-fetched server content —
+    // otherwise reopening the file after a crash silently throws the draft
+    // away. mtimeMs/encoding still come from the server response regardless,
+    // since future save/conflict checks must compare against the real file.
+    const hasDraft = draft !== null
+    setTabs((prev) =>
+      prev.map((t) =>
+        t.id === tabId
+          ? { ...t, content: hasDraft ? (draft as string) : content, mtimeMs, encoding, dirty: hasDraft ? true : t.dirty }
+          : t
+      )
+    )
+  }
+
+  function handleChange(tabId: string, value: string) {
+    setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, content: value, dirty: true } : t)))
+    saveDraft(value)
+  }
+
+  function handleModeChange(tabId: string, mode: Tab['mode']) {
+    setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, mode } : t)))
+  }
+
+  async function putFile(tab: Tab, force: boolean): Promise<Response> {
+    return apiFetch(`/api/file?root=${tab.rootId}&path=${encodeURIComponent(tab.relPath)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: tab.content, mtimeMs: tab.mtimeMs, ...(force ? { force: true } : {}) }),
+    })
+  }
+
+  async function handleSave(tabId: string) {
+    const tab = tabs.find((t) => t.id === tabId)
+    if (!tab) return
+    const res = await putFile(tab, false)
+    if (res.ok) {
+      const data = await res.json()
+      setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, mtimeMs: data.mtimeMs, dirty: false } : t)))
+      clearDraft()
+      return
+    }
+    if (res.status === 409) {
+      const data = await res.json()
+      setConflict({ tabId, currentContent: data.currentContent, currentMtimeMs: data.currentMtimeMs })
+      return
+    }
+    console.error('Failed to save file', res.status)
+  }
+
+  async function handleKeepMine() {
+    if (!conflict) return
+    const tab = tabs.find((t) => t.id === conflict.tabId)
+    if (tab) {
+      const res = await putFile(tab, true)
+      if (res.ok) {
+        const data = await res.json()
+        setTabs((prev) => prev.map((t) => (t.id === tab.id ? { ...t, mtimeMs: data.mtimeMs, dirty: false } : t)))
+        clearDraft()
+      } else {
+        console.error('Failed to force-save file', res.status)
+      }
+    }
+    setConflict(null)
+  }
+
+  function handleDiscardMine() {
+    if (!conflict) return
+    setTabs((prev) =>
+      prev.map((t) =>
+        t.id === conflict.tabId
+          ? { ...t, content: conflict.currentContent, mtimeMs: conflict.currentMtimeMs, dirty: false }
+          : t
+      )
+    )
+    clearDraft()
+    setConflict(null)
+  }
 
   function handleJumpToHeading(line: number) {
     // Scrolling to the heading's line is the main-content-view plan's job —
@@ -204,7 +309,57 @@ export function App() {
         </Sidebar>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           <TabBar tabs={tabs} activeTabId={activeTabId} onSelect={setActiveTabId} onClose={closeTab} />
-          <div style={{ flex: 1, overflow: 'auto' }}>{/* main content area: later plan */}</div>
+          <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+            {activeTab && (
+              <>
+                <div data-testid="mode-toggle" style={{ display: 'flex', gap: 4, padding: '4px 12px' }}>
+                  <button
+                    data-testid="mode-view"
+                    aria-pressed={activeTab.mode === 'view'}
+                    onClick={() => handleModeChange(activeTab.id, 'view')}
+                  >
+                    {t('modeToggle.view', 'View')}
+                  </button>
+                  {activeTab.encoding !== 'unknown' && (
+                    <>
+                      <button
+                        data-testid="mode-edit"
+                        aria-pressed={activeTab.mode === 'edit'}
+                        onClick={() => handleModeChange(activeTab.id, 'edit')}
+                      >
+                        {t('modeToggle.edit', 'Edit')}
+                      </button>
+                      <button
+                        data-testid="mode-split"
+                        aria-pressed={activeTab.mode === 'split'}
+                        onClick={() => handleModeChange(activeTab.id, 'split')}
+                      >
+                        {t('modeToggle.split', 'Split')}
+                      </button>
+                    </>
+                  )}
+                </div>
+                <div style={{ flex: 1, overflow: 'auto' }}>
+                  <TabContent
+                    tab={activeTab}
+                    onContentLoaded={(content, mtimeMs, encoding) =>
+                      handleContentLoaded(activeTab.id, content, mtimeMs, encoding)
+                    }
+                    onChange={(value) => handleChange(activeTab.id, value)}
+                    onSave={() => handleSave(activeTab.id)}
+                    allowHtmlScripts={false}
+                  />
+                </div>
+                {conflict && conflict.tabId === activeTab.id && (
+                  <ConflictDialog
+                    currentContent={conflict.currentContent}
+                    onKeepMine={handleKeepMine}
+                    onDiscardMine={handleDiscardMine}
+                  />
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>

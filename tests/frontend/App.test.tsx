@@ -13,6 +13,14 @@ function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status })
 }
 
+// The markdown editor's <textarea> and the sidebar's search <input> both carry
+// the implicit ARIA "textbox" role, so `getByRole('textbox')` is ambiguous once
+// both are on screen — query the editor element directly instead.
+async function findEditorTextarea(): Promise<HTMLTextAreaElement> {
+  await waitFor(() => expect(document.querySelector('textarea')).toBeInTheDocument())
+  return document.querySelector('textarea') as HTMLTextAreaElement
+}
+
 /**
  * Routes fetch calls by matching a substring against the requested URL, in the
  * order given. Falls back to an empty-files response so unmatched /api/files
@@ -389,5 +397,190 @@ describe('App search wiring', () => {
         String(url).includes('/api/search')
       )
     ).toBe(false)
+  })
+})
+
+describe('App main content, save, draft, and conflict wiring', () => {
+  beforeEach(() => localStorage.clear())
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('opens a file and shows its content in the main content area', async () => {
+    stubRoutedFetch([
+      { match: '/api/roots', response: [{ id: 0, name: 'proj' }] },
+      { match: '/api/files', response: { files: [{ relPath: 'a.md', size: 5, mtimeMs: 1 }] } },
+      { match: '/api/file?', response: { content: '# Hi', mtimeMs: 1, encoding: 'utf-8' } },
+    ])
+    render(<App />)
+    await waitFor(() => screen.getByText('a.md'))
+    fireEvent.click(screen.getByText('a.md'))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Hi' })).toBeInTheDocument())
+  })
+
+  it('prefers a localStorage draft over freshly-fetched server content when reopening a file, keeping the tab dirty', async () => {
+    localStorage.setItem('mvs-draft:0:a.md', '# Draft')
+    stubRoutedFetch([
+      { match: '/api/roots', response: [{ id: 0, name: 'proj' }] },
+      { match: '/api/files', response: { files: [{ relPath: 'a.md', size: 5, mtimeMs: 1 }] } },
+      { match: '/api/file?', response: { content: '# Server', mtimeMs: 1, encoding: 'utf-8' } },
+    ])
+    render(<App />)
+    await waitFor(() => screen.getByText('a.md'))
+    fireEvent.click(screen.getByText('a.md'))
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Draft' })).toBeInTheDocument())
+    expect(screen.queryByRole('heading', { name: 'Server' })).not.toBeInTheDocument()
+    expect(screen.getByTestId('tab-bar').textContent).toContain('●')
+  })
+
+  it('switching to edit mode and typing marks the tab dirty and persists a draft', async () => {
+    stubRoutedFetch([
+      { match: '/api/roots', response: [{ id: 0, name: 'proj' }] },
+      { match: '/api/files', response: { files: [{ relPath: 'a.md', size: 5, mtimeMs: 1 }] } },
+      { match: '/api/file?', response: { content: '# Hi', mtimeMs: 1, encoding: 'utf-8' } },
+    ])
+    render(<App />)
+    await waitFor(() => screen.getByText('a.md'))
+    fireEvent.click(screen.getByText('a.md'))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Hi' })).toBeInTheDocument())
+
+    fireEvent.click(screen.getByTestId('mode-edit'))
+    const textarea = await findEditorTextarea()
+    fireEvent.change(textarea, { target: { value: '# Hi edited' } })
+
+    expect(screen.getByTestId('tab-bar').textContent).toContain('●')
+    expect(localStorage.getItem('mvs-draft:0:a.md')).toBe('# Hi edited')
+  })
+
+  it('Ctrl+S saves the active tab: PUTs the content+mtime, then updates mtimeMs, clears dirty, and clears the draft', async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string, options?: RequestInit) => {
+      if (url.includes('/api/roots')) return Promise.resolve(jsonResponse([{ id: 0, name: 'proj' }]))
+      if (url.includes('/api/files'))
+        return Promise.resolve(jsonResponse({ files: [{ relPath: 'a.md', size: 5, mtimeMs: 1 }] }))
+      if (options?.method === 'PUT') return Promise.resolve(jsonResponse({ mtimeMs: 42 }))
+      if (url.includes('/api/file?')) return Promise.resolve(jsonResponse({ content: '# Hi', mtimeMs: 1, encoding: 'utf-8' }))
+      return Promise.resolve(jsonResponse({}))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+    await waitFor(() => screen.getByText('a.md'))
+    fireEvent.click(screen.getByText('a.md'))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Hi' })).toBeInTheDocument())
+    fireEvent.click(screen.getByTestId('mode-edit'))
+    const textarea = await findEditorTextarea()
+    fireEvent.change(textarea, { target: { value: '# Hi edited' } })
+    expect(screen.getByTestId('tab-bar').textContent).toContain('●')
+
+    fireEvent.keyDown(textarea, { key: 's', ctrlKey: true })
+
+    await waitFor(() => expect(screen.getByTestId('tab-bar').textContent).not.toContain('●'))
+    expect(localStorage.getItem('mvs-draft:0:a.md')).toBeNull()
+
+    const putCall = fetchMock.mock.calls.find(([, opts]) => (opts as RequestInit | undefined)?.method === 'PUT')
+    expect(putCall).toBeTruthy()
+    const [putUrl, putOptions] = putCall!
+    expect(String(putUrl)).toContain('root=0')
+    expect(String(putUrl)).toContain('path=a.md')
+    expect(JSON.parse((putOptions as RequestInit).body as string)).toEqual({ content: '# Hi edited', mtimeMs: 1 })
+  })
+
+  it('shows ConflictDialog on a 409 save response and force-overwrites when Keep Mine is chosen', async () => {
+    let putCount = 0
+    const fetchMock = vi.fn().mockImplementation((url: string, options?: RequestInit) => {
+      if (url.includes('/api/roots')) return Promise.resolve(jsonResponse([{ id: 0, name: 'proj' }]))
+      if (url.includes('/api/files'))
+        return Promise.resolve(jsonResponse({ files: [{ relPath: 'a.md', size: 5, mtimeMs: 1 }] }))
+      if (options?.method === 'PUT') {
+        putCount++
+        if (putCount === 1) {
+          return Promise.resolve(
+            jsonResponse({ errorCode: 'CONFLICT', currentContent: '# External', currentMtimeMs: 99 }, 409)
+          )
+        }
+        return Promise.resolve(jsonResponse({ mtimeMs: 100 }))
+      }
+      if (url.includes('/api/file?')) return Promise.resolve(jsonResponse({ content: '# Hi', mtimeMs: 1, encoding: 'utf-8' }))
+      return Promise.resolve(jsonResponse({}))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+    await waitFor(() => screen.getByText('a.md'))
+    fireEvent.click(screen.getByText('a.md'))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Hi' })).toBeInTheDocument())
+    fireEvent.click(screen.getByTestId('mode-edit'))
+    const textarea = await findEditorTextarea()
+    fireEvent.change(textarea, { target: { value: '# Hi edited' } })
+    fireEvent.keyDown(textarea, { key: 's', ctrlKey: true })
+
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
+    expect(screen.getByText(/External/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /keep mine/i }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(localStorage.getItem('mvs-draft:0:a.md')).toBeNull()
+    expect(screen.getByTestId('tab-bar').textContent).not.toContain('●')
+
+    const putCalls = fetchMock.mock.calls.filter(([, opts]) => (opts as RequestInit | undefined)?.method === 'PUT')
+    expect(putCalls).toHaveLength(2)
+    const secondBody = JSON.parse((putCalls[1][1] as RequestInit).body as string)
+    expect(secondBody).toEqual({ content: '# Hi edited', mtimeMs: 1, force: true })
+  })
+
+  it('Discard Mine reloads the externally-modified content into the tab and clears the draft, without retrying the save', async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string, options?: RequestInit) => {
+      if (url.includes('/api/roots')) return Promise.resolve(jsonResponse([{ id: 0, name: 'proj' }]))
+      if (url.includes('/api/files'))
+        return Promise.resolve(jsonResponse({ files: [{ relPath: 'a.md', size: 5, mtimeMs: 1 }] }))
+      if (options?.method === 'PUT') {
+        return Promise.resolve(
+          jsonResponse({ errorCode: 'CONFLICT', currentContent: '# External', currentMtimeMs: 99 }, 409)
+        )
+      }
+      if (url.includes('/api/file?')) return Promise.resolve(jsonResponse({ content: '# Hi', mtimeMs: 1, encoding: 'utf-8' }))
+      return Promise.resolve(jsonResponse({}))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+    await waitFor(() => screen.getByText('a.md'))
+    fireEvent.click(screen.getByText('a.md'))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Hi' })).toBeInTheDocument())
+    fireEvent.click(screen.getByTestId('mode-edit'))
+    const textarea = await findEditorTextarea()
+    fireEvent.change(textarea, { target: { value: '# Hi edited' } })
+    fireEvent.keyDown(textarea, { key: 's', ctrlKey: true })
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
+
+    const putCallsBefore = fetchMock.mock.calls.filter(
+      ([, opts]) => (opts as RequestInit | undefined)?.method === 'PUT'
+    ).length
+
+    fireEvent.click(screen.getByRole('button', { name: /discard mine/i }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect((document.querySelector('textarea') as HTMLTextAreaElement).value).toBe('# External')
+    expect(localStorage.getItem('mvs-draft:0:a.md')).toBeNull()
+    expect(screen.getByTestId('tab-bar').textContent).not.toContain('●')
+
+    const putCallsAfter = fetchMock.mock.calls.filter(
+      ([, opts]) => (opts as RequestInit | undefined)?.method === 'PUT'
+    ).length
+    expect(putCallsAfter).toBe(putCallsBefore)
+  })
+
+  it('hides the edit/split mode buttons for a non-UTF-8 file', async () => {
+    stubRoutedFetch([
+      { match: '/api/roots', response: [{ id: 0, name: 'proj' }] },
+      { match: '/api/files', response: { files: [{ relPath: 'bin.md', size: 5, mtimeMs: 1 }] } },
+      { match: '/api/file?', response: { content: '<binary>', mtimeMs: 1, encoding: 'unknown' } },
+    ])
+    render(<App />)
+    await waitFor(() => screen.getByText('bin.md'))
+    fireEvent.click(screen.getByText('bin.md'))
+    await waitFor(() => expect(screen.getByTestId('mode-view')).toBeInTheDocument())
+    expect(screen.queryByTestId('mode-edit')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('mode-split')).not.toBeInTheDocument()
   })
 })

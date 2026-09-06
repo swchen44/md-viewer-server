@@ -27,5 +27,10 @@
   "tabContent": {
     "loading": "불러오는 중...",
     "loadError": "이 파일을 불러오지 못했습니다"
+  },
+  "modeToggle": {
+    "view": "보기",
+    "edit": "편집",
+    "split": "분할"
   }
 }
