@@ -21,7 +21,12 @@ export function createPlantUmlRouter(configDir) {
         return res.status(502).json({ errorCode: 'PLANTUML_UNREACHABLE' })
       }
       const buffer = Buffer.from(await upstreamRes.arrayBuffer())
-      res.set('Content-Type', upstreamRes.headers.get('content-type') ?? 'image/png')
+      // Never pass the upstream's Content-Type through: /png/ is expected to
+      // return a PNG, and echoing e.g. text/html would let an upstream render
+      // attacker-controlled HTML on this app's own origin — where the auth
+      // token lives in sessionStorage.
+      res.set('Content-Type', 'image/png')
+      res.set('X-Content-Type-Options', 'nosniff')
       res.send(buffer)
     } catch {
       res.status(502).json({ errorCode: 'PLANTUML_UNREACHABLE' })

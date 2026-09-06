@@ -13,14 +13,18 @@ describe('settings and PlantUML proxy API', () => {
   let configDir
   let fakeUpstream
   let fakeUpstreamPort
+  let upstreamContentType
 
   beforeEach(async () => {
     configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'api-plantuml-'))
     loadOrCreateConfig(configDir, { roots: ['/tmp/a'], port: 4173 })
+    upstreamContentType = 'image/png'
 
     fakeUpstream = http.createServer((req, res) => {
       if (req.url.includes('/png/')) {
-        res.setHeader('Content-Type', 'image/png')
+        // `upstreamContentType` lets a test make the fake upstream misbehave
+        // (e.g. answer HTML) so we can prove the proxy does not pass it through.
+        res.setHeader('Content-Type', upstreamContentType)
         res.end(Buffer.from([0x89, 0x50, 0x4e, 0x47]))
       } else {
         res.statusCode = 404
@@ -74,6 +78,24 @@ describe('settings and PlantUML proxy API', () => {
 
     expect(res.status).toBe(200)
     expect(res.headers['content-type']).toContain('image/png')
+    expect(res.headers['x-content-type-options']).toBe('nosniff')
+  })
+
+  it('forces image/png even when the upstream answers with a different content-type', async () => {
+    upstreamContentType = 'text/html; charset=utf-8'
+    const app = buildApp()
+    await request(app)
+      .put('/api/settings')
+      .send({ plantumlServerUrl: `http://127.0.0.1:${fakeUpstreamPort}` })
+
+    const res = await request(app)
+      .post('/api/plantuml-proxy')
+      .send({ source: '@startuml\nAlice -> Bob\n@enduml' })
+
+    expect(res.status).toBe(200)
+    expect(res.headers['content-type']).toContain('image/png')
+    expect(res.headers['content-type']).not.toContain('text/html')
+    expect(res.headers['x-content-type-options']).toBe('nosniff')
   })
 
   it('returns 502 when the upstream PlantUML server is unreachable', async () => {
