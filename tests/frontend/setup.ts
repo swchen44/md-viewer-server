@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { afterEach } from 'vitest'
 import { cleanup } from '@testing-library/react'
+import { matchOutlineHeadings } from '../../src/frontend/outline-regex-match.js'
 
 // Node's built-in global `localStorage` (available since Node 22+, no flag needed for
 // the property to exist) requires an explicit `--localstorage-file` CLI flag to actually
@@ -34,6 +35,43 @@ if (typeof globalThis.localStorage === 'undefined' || typeof globalThis.localSto
   }
   Object.defineProperty(globalThis, 'localStorage', {
     value: new MemoryStorage(),
+    configurable: true,
+    writable: true,
+  })
+}
+
+// jsdom (this project's frontend test environment) does not implement the
+// Worker API at all, so OutlinePanel's real Worker-based regex filter (see
+// src/frontend/outline-regex-client.ts) would throw "Worker is not defined"
+// in every test that exercises regex-mode outline search. Provide a
+// same-thread stand-in that honors the same postMessage/onmessage/terminate
+// surface and delegates to the exact matching logic the real worker script
+// runs, so tests get real (fast) regex results without a real thread.
+// Individual tests can still override `Worker` via `vi.stubGlobal('Worker',
+// ...)` (restored by `vi.unstubAllGlobals()` in their own afterEach) to
+// simulate a slow/stuck worker for timeout-specific assertions.
+if (typeof globalThis.Worker === 'undefined') {
+  class TestOutlineRegexWorker {
+    onmessage: ((event: MessageEvent) => void) | null = null
+    onerror: ((event: ErrorEvent) => void) | null = null
+    private terminated = false
+    postMessage(data: { pattern: string; texts: string[] }) {
+      queueMicrotask(() => {
+        if (this.terminated) return
+        this.onmessage?.({ data: matchOutlineHeadings(data.pattern, data.texts) } as MessageEvent)
+      })
+    }
+    terminate() {
+      this.terminated = true
+    }
+    addEventListener() {}
+    removeEventListener() {}
+    dispatchEvent(): boolean {
+      return true
+    }
+  }
+  Object.defineProperty(globalThis, 'Worker', {
+    value: TestOutlineRegexWorker,
     configurable: true,
     writable: true,
   })

@@ -165,8 +165,13 @@ describe('OutlinePanel', () => {
         headingFilter={{ query: '^D', regex: true }}
       />
     )
-    await waitFor(() => expect(screen.getByText('Details')).toBeInTheDocument())
-    expect(screen.queryByText('Intro')).not.toBeInTheDocument()
+    // The regex match now runs off-thread (Bug 3 fix) and resolves
+    // asynchronously, so headings stay visible until it settles — waiting
+    // for the non-matching heading to disappear (rather than for the
+    // matching one to appear, which is already showing while pending) is
+    // what actually proves the filter finished applying.
+    await waitFor(() => expect(screen.queryByText('Intro')).not.toBeInTheDocument())
+    expect(screen.getByText('Details')).toBeInTheDocument()
   })
 
   it('shows all headings when headingFilter query is empty', async () => {
@@ -207,7 +212,57 @@ describe('OutlinePanel', () => {
       />
     )
     await waitFor(() => expect(fetchMock).toHaveBeenCalled())
-    await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(screen.queryByText('Intro')).not.toBeInTheDocument()
+    // The regex match itself now runs off the main thread (see Bug 3 fix
+    // below) and resolves/rejects asynchronously via a Worker round-trip, so
+    // waiting for the DOM to settle (rather than a single fixed tick) is what
+    // actually proves "no crash, no stale headings" here.
+    await waitFor(() => expect(screen.queryByText('Intro')).not.toBeInTheDocument())
+  })
+
+  it('does not hang the main thread on a pathological regex — the match is bounded by a hard timeout', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ headings: [{ level: 1, text: 'Intro', line: 1 }] }))
+      )
+    )
+
+    const { rerender } = render(
+      <OutlinePanel activeTab={{ rootId: 0, relPath: 'a.md' }} onJumpToHeading={() => {}} />
+    )
+    await vi.waitFor(() => expect(screen.getByText('Intro')).toBeInTheDocument())
+
+    // Simulate a worker stuck evaluating a catastrophic-backtracking pattern
+    // (e.g. `(a|a)+$` against a long run of "a"s) by never calling back.
+    // From OutlinePanel's perspective, "still computing forever" and "hung"
+    // look identical — what matters is that the panel doesn't wait forever.
+    class StuckWorker {
+      onmessage: ((event: MessageEvent) => void) | null = null
+      onerror: ((event: ErrorEvent) => void) | null = null
+      postMessage() {}
+      terminate() {}
+    }
+    vi.stubGlobal('Worker', StuckWorker)
+
+    rerender(
+      <OutlinePanel
+        activeTab={{ rootId: 0, relPath: 'a.md' }}
+        onJumpToHeading={() => {}}
+        headingFilter={{ query: '(a|a)+$', regex: true }}
+      />
+    )
+
+    // While the match is in flight (the stuck worker hasn't — and never
+    // will — respond), the panel keeps showing the already-loaded headings
+    // rather than blanking to "no results" for the whole round-trip.
+    expect(screen.getByText('Intro')).toBeInTheDocument()
+
+    await vi.advanceTimersByTimeAsync(2000)
+
+    // Bounded: after the hard timeout the panel gives up on the stuck worker
+    // and shows no matches, instead of leaving stale results on screen or
+    // waiting indefinitely.
+    await vi.waitFor(() => expect(screen.queryByText('Intro')).not.toBeInTheDocument())
   })
 })
