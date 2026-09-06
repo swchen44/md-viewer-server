@@ -115,6 +115,71 @@ describe('CLI lifecycle: start -> status -> stop', () => {
     expect(newTokenRes.status).toBe(200)
   })
 
+  it('--rotate-token with no valid root aborts without rotating or starting anything', async () => {
+    // Establish a config with a known token, then stop, so the daemon is not
+    // running for the simplest repro of the ordering bug.
+    const { stdout: startOut } = await execFileAsync(
+      process.execPath,
+      [CLI_PATH, 'start', '--root', testRoot, '--port', String(TEST_PORT)],
+      { env }
+    )
+    const originalToken = extractToken(startOut)
+    await execFileAsync(process.execPath, [CLI_PATH, 'stop'], { env })
+
+    const configPath = path.join(configHome, 'md-viewer-server', 'config.json')
+    const before = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+    expect(before.token).toBe(originalToken)
+
+    const missingRoot = path.join(testRoot, 'does-not-exist')
+    const failure = await execFileAsync(
+      process.execPath,
+      [CLI_PATH, 'start', '--root', missingRoot, '--port', String(TEST_PORT), '--rotate-token'],
+      { env }
+    ).catch((err) => err)
+
+    expect(failure.code).toBe(1)
+    expect(failure.stderr).toContain('No valid roots to serve. Aborting.')
+    expect(failure.stdout).not.toContain('Token rotated')
+    expect(failure.stdout).not.toContain('Started.')
+
+    const after = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+    expect(after.token).toBe(originalToken)
+    expect(after.roots).toEqual(before.roots)
+
+    const { stdout: statusOut } = await execFileAsync(process.execPath, [CLI_PATH, 'status'], {
+      env,
+    })
+    expect(statusOut).toContain('Not running')
+  })
+
+  it('--rotate-token with no valid root leaves an already-running daemon alive on its old token', async () => {
+    const { stdout: startOut } = await execFileAsync(
+      process.execPath,
+      [CLI_PATH, 'start', '--root', testRoot, '--port', String(TEST_PORT)],
+      { env }
+    )
+    const originalToken = extractToken(startOut)
+
+    const missingRoot = path.join(testRoot, 'does-not-exist')
+    const failure = await execFileAsync(
+      process.execPath,
+      [CLI_PATH, 'start', '--root', missingRoot, '--port', String(TEST_PORT), '--rotate-token'],
+      { env }
+    ).catch((err) => err)
+
+    expect(failure.code).toBe(1)
+    expect(failure.stderr).toContain('No valid roots to serve. Aborting.')
+
+    // The daemon is untouched and still accepts the token it was started with.
+    const stillServing = await fetch(`http://127.0.0.1:${TEST_PORT}/api/roots`, {
+      headers: { 'X-Auth-Token': originalToken },
+    })
+    expect(stillServing.status).toBe(200)
+
+    const configPath = path.join(configHome, 'md-viewer-server', 'config.json')
+    expect(JSON.parse(fs.readFileSync(configPath, 'utf-8')).token).toBe(originalToken)
+  })
+
   it('a re-`start` preserves plantumlServerUrl written via the settings API', async () => {
     const { stdout: startOut } = await execFileAsync(
       process.execPath,

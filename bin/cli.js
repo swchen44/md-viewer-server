@@ -3,11 +3,10 @@ import { parseArgs } from '../src/server/commands/cli-args.js'
 import { runStart } from '../src/server/commands/start.js'
 import { runStatus } from '../src/server/commands/status.js'
 import { runStop } from '../src/server/commands/stop.js'
-import { restartForRotatedToken } from '../src/server/commands/rotate-restart.js'
+import { startWithRotatedToken } from '../src/server/commands/rotate-restart.js'
 import { runDoctor } from '../src/server/doctor.js'
 import { getConfigDir, getStateDir } from '../src/server/xdg-paths.js'
-import { readConfig, rotateToken } from '../src/server/config.js'
-import { checkHealth } from '../src/server/daemon-utils.js'
+import { readConfig } from '../src/server/config.js'
 
 function printLinks(ips, port, token) {
   const targets = ips.length > 0 ? ips : ['127.0.0.1']
@@ -67,32 +66,38 @@ async function main() {
   )
 
   if (command === 'start') {
-    let wasRunningBeforeRotate = false
     if (shouldRotateToken) {
+      let result
       try {
-        const rotated = rotateToken(getConfigDir())
-        console.log(`Token rotated: ${rotated.token}`)
-        wasRunningBeforeRotate = Boolean(await checkHealth(rotated.port))
+        result = await startWithRotatedToken({ roots, port, debug })
       } catch (err) {
         console.error(err.message)
         process.exitCode = 1
         return
       }
-    }
-    if (wasRunningBeforeRotate) {
-      // The running daemon read config.json once at startup, so the
-      // rotated token has no effect on it yet. Restart so the freshly
-      // spawned process picks up the new token from the updated config.
-      const restart = await restartForRotatedToken({ roots, port, debug })
-      if (restart.outcome === 'stop-failed') {
+
+      if (result.outcome === 'no-valid-roots') {
+        // Aborted before rotating or stopping anything.
+        printStartResult(result)
+        return
+      }
+      if (result.outcome === 'stop-failed') {
         console.error(
-          'Token rotated in config.json, but the running daemon could not be stopped to apply it.'
+          'Could not stop the running daemon, so the token was left unchanged. Nothing was restarted.'
         )
         process.exitCode = 1
         return
       }
-      console.log('Token rotated; daemon restarted to apply it.')
-      printStartResult(restart.startResult)
+
+      console.log(`Token rotated: ${result.rotated.token}`)
+      if (result.startResult.outcome === 'started') {
+        console.log(
+          result.wasRunning
+            ? 'Token rotated; daemon restarted to apply it.'
+            : 'Token rotated; daemon started with the new token.'
+        )
+      }
+      printStartResult(result.startResult)
       return
     }
     printStartResult(await runStart({ roots, port, debug }))

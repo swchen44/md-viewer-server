@@ -18,10 +18,16 @@ function resolveEntryPath() {
   return fs.existsSync(DEV_ENTRY_PATH) ? DEV_ENTRY_PATH : BUNDLE_PATH
 }
 
-export async function runStart({ roots, port, debug = false }) {
+/**
+ * Splits the requested roots into the ones we can actually serve and the ones
+ * to warn about. Exported so callers that must decide *before* mutating any
+ * state (notably the token-rotation flow) can reject an unserveable request
+ * without first destroying a running daemon.
+ */
+export function validateRoots(roots) {
   const validRoots = []
   const skippedRoots = []
-  for (const root of roots) {
+  for (const root of roots ?? []) {
     try {
       fs.accessSync(root, fs.constants.R_OK)
       validRoots.push(path.resolve(root))
@@ -29,6 +35,11 @@ export async function runStart({ roots, port, debug = false }) {
       skippedRoots.push(root)
     }
   }
+  return { validRoots, skippedRoots }
+}
+
+export async function runStart({ roots, port, debug = false }) {
+  const { validRoots, skippedRoots } = validateRoots(roots)
 
   if (validRoots.length === 0) {
     return { outcome: 'no-valid-roots', skippedRoots }
