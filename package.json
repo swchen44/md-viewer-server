@@ -12,21 +12,34 @@
   "scripts": {
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
+    "test:frontend": "vitest run --config vitest.frontend.config.ts tests/frontend",
     "lint": "eslint .",
-    "build": "node scripts/build.js"
+    "build": "node scripts/build.js",
+    "dev:frontend": "vite",
+    "build:frontend": "vite build"
   },
   "dependencies": {
     "chokidar": "^5.0.0",
     "express": "^4.21.0",
     "pino": "^9.4.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "ws": "^8.21.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^4.3.4",
     "esbuild": "^0.24.0",
     "eslint": "^9.13.0",
+    "jsdom": "^30.0.1",
     "prettier": "^3.3.3",
     "supertest": "^7.0.0",
-    "vitest": "^2.1.0"
+    "typescript": "^7.0.2",
+    "vite": "^6.1.6",
+    "vitest": "^2.1.9"
   }
 }
