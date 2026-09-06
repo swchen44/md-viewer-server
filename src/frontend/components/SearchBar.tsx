@@ -43,6 +43,18 @@ type SearchBarProps = FilesSearchBarProps | OutlineSearchBarProps
 
 const DEBOUNCE_MS = 300
 
+// Clamps a raw `<input type="number">` value to the max-history-size input's
+// declared 1-100 range. `Number(rawValue)` becomes `0` for an emptied field and
+// `NaN` for non-numeric input; the input's `min`/`max` attributes are only UI
+// hints and don't constrain the actual value read from `e.target.value` in JS.
+// Returns `null` for a value that can't be sensibly clamped (NaN), signaling
+// the caller to ignore the change rather than persist garbage.
+function clampHistoryMaxSize(rawValue: string): number | null {
+  const parsed = Number(rawValue)
+  if (!Number.isFinite(parsed)) return null
+  return Math.min(100, Math.max(1, Math.round(parsed)))
+}
+
 export function SearchBar(props: SearchBarProps) {
   const { mode } = props
   const { t } = useTranslation()
@@ -64,6 +76,13 @@ export function SearchBar(props: SearchBarProps) {
   useEffect(() => {
     latestPropsRef.current = props
   })
+  // Set by `commitSearch` whenever it changes `query` (i.e. the committed
+  // suggestion's text differs from what the user had typed so far). The
+  // debounced-search effect below checks this to skip rescheduling itself for
+  // a query that was *just* searched synchronously by the commit, so a
+  // deliberate Enter/click commit doesn't also fire a redundant duplicate
+  // `onSearch` ~300ms later for the same query.
+  const lastCommittedQueryRef = useRef<string | null>(null)
 
   // Search history + autocomplete: entries/maxSize are `useSearchHistory`'s own
   // state (persisted to localStorage, per-mode). `suggestionsOpen` and
@@ -106,6 +125,14 @@ export function SearchBar(props: SearchBarProps) {
 
   useEffect(() => {
     clearTimeout(timerRef.current)
+    // `commitSearch` already called `onSearch` synchronously for this exact
+    // query; consume the flag so this render doesn't reschedule a duplicate
+    // debounced call, while leaving future genuine query/target/scope/regex
+    // changes to debounce normally.
+    if (lastCommittedQueryRef.current === query) {
+      lastCommittedQueryRef.current = null
+      return
+    }
     timerRef.current = setTimeout(() => {
       const current = latestPropsRef.current
       if (current.mode === 'files') {
@@ -126,6 +153,14 @@ export function SearchBar(props: SearchBarProps) {
   const commitSearch = (finalQuery: string) => {
     clearTimeout(timerRef.current)
     addEntry(finalQuery)
+    // Only flag the query as "just committed" when it actually changes `query`
+    // state — if it doesn't change, the debounced-search effect won't rerun at
+    // all, so there's nothing to suppress, and leaving the flag set would
+    // incorrectly swallow a later, genuinely new search that happens to match
+    // this same text.
+    if (finalQuery !== query) {
+      lastCommittedQueryRef.current = finalQuery
+    }
     setQuery(finalQuery)
     setSuggestionsOpen(false)
     setHighlightedIndex(-1)
@@ -227,7 +262,10 @@ export function SearchBar(props: SearchBarProps) {
           min={1}
           max={100}
           value={historyMaxSize}
-          onChange={(e) => setMaxSize(Number(e.target.value))}
+          onChange={(e) => {
+            const clamped = clampHistoryMaxSize(e.target.value)
+            if (clamped !== null) setMaxSize(clamped)
+          }}
           aria-label={t('search.historyMaxSizeLabel', 'History size')}
         />
       </div>

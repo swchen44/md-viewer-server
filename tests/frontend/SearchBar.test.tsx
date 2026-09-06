@@ -258,5 +258,82 @@ describe('SearchBar', () => {
       vi.useRealTimers()
       expect(localStorage.getItem('mvs-search-history:files')).toBeNull()
     })
+
+    it('does not carry stale in-memory history over when rerendered in place across modes', () => {
+      localStorage.setItem(
+        'mvs-search-history:files',
+        JSON.stringify({ maxSize: 10, entries: ['files query'] })
+      )
+      const onSearch = vi.fn()
+      const { rerender } = render(<SearchBar mode="files" onSearch={onSearch} />)
+      const input = screen.getByPlaceholderText(/search/i)
+      fireEvent.change(input, { target: { value: 'new files query' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+
+      // Rerendered in place (not remounted), same as App.tsx swapping sidebar modes.
+      rerender(<SearchBar mode="outline" onSearch={onSearch} />)
+      const outlineInput = screen.getByPlaceholderText(/search/i)
+      fireEvent.focus(outlineInput)
+      // Outline mode has no history of its own yet — it must not show files-mode entries.
+      expect(screen.queryByText('files query')).not.toBeInTheDocument()
+      expect(screen.queryByText('new files query')).not.toBeInTheDocument()
+
+      // Commit a search in outline mode; this must not persist stale files-mode
+      // entries into outline's own stored history.
+      fireEvent.change(outlineInput, { target: { value: 'outline query' } })
+      fireEvent.keyDown(outlineInput, { key: 'Enter' })
+
+      const outlineStored = JSON.parse(localStorage.getItem('mvs-search-history:outline') ?? '{}')
+      expect(outlineStored.entries).toEqual(['outline query'])
+
+      const filesStored = JSON.parse(localStorage.getItem('mvs-search-history:files') ?? '{}')
+      expect(filesStored.entries).toEqual(['new files query', 'files query'])
+    })
+
+    it('committing a suggestion whose text differs from the typed-so-far query does not fire a duplicate debounced search', () => {
+      vi.useFakeTimers()
+      localStorage.setItem(
+        'mvs-search-history:files',
+        JSON.stringify({ maxSize: 10, entries: ['hello world'] })
+      )
+      const onSearch = vi.fn()
+      render(<SearchBar mode="files" onSearch={onSearch} />)
+      const input = screen.getByPlaceholderText(/search/i)
+      fireEvent.change(input, { target: { value: 'hel' } })
+      fireEvent.focus(input)
+      fireEvent.click(screen.getByText('hello world'))
+
+      expect(onSearch).toHaveBeenCalledTimes(1)
+      expect(onSearch).toHaveBeenCalledWith('hello world', {
+        target: 'both',
+        scope: 'all',
+        regex: false,
+      })
+
+      vi.advanceTimersByTime(300)
+
+      // No redundant debounced call should follow the immediate commit call.
+      expect(onSearch).toHaveBeenCalledTimes(1)
+    })
+
+    it('clamps an invalid max-size input instead of persisting 0, NaN, or an out-of-range value', () => {
+      render(<SearchBar mode="files" onSearch={() => {}} />)
+      const maxSizeInput = screen.getByLabelText(/history size|max.*history/i)
+
+      fireEvent.change(maxSizeInput, { target: { value: '' } })
+      let stored = JSON.parse(localStorage.getItem('mvs-search-history:files') ?? '{}')
+      expect(stored.maxSize).not.toBe(0)
+      expect(Number.isNaN(stored.maxSize)).toBe(false)
+      expect(stored.maxSize).toBeGreaterThanOrEqual(1)
+      expect(stored.maxSize).toBeLessThanOrEqual(100)
+
+      fireEvent.change(maxSizeInput, { target: { value: '0' } })
+      stored = JSON.parse(localStorage.getItem('mvs-search-history:files') ?? '{}')
+      expect(stored.maxSize).toBeGreaterThanOrEqual(1)
+
+      fireEvent.change(maxSizeInput, { target: { value: '500' } })
+      stored = JSON.parse(localStorage.getItem('mvs-search-history:files') ?? '{}')
+      expect(stored.maxSize).toBeLessThanOrEqual(100)
+    })
   })
 })
