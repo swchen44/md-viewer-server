@@ -69,6 +69,27 @@ describe('config file management', () => {
     expect(second.port).toBe(6000)
   })
 
+  it('preserves settings keys written by updateSettings across a later start', () => {
+    const first = loadOrCreateConfig(dir, { roots: ['/tmp/a'], port: 4173 })
+    // simulate what updateSettings does: merge an extra key into config.json
+    const withSetting = {
+      ...readConfig(dir),
+      plantumlServerUrl: 'http://plantuml.internal:8080',
+      sendToPlantUmlServer: true,
+    }
+    fs.writeFileSync(getConfigPath(dir), JSON.stringify(withSetting, null, 2))
+
+    const second = loadOrCreateConfig(dir, { roots: ['/tmp/b'], port: 6000 })
+
+    expect(second.plantumlServerUrl).toBe('http://plantuml.internal:8080')
+    expect(second.sendToPlantUmlServer).toBe(true)
+    expect(readConfig(dir).plantumlServerUrl).toBe('http://plantuml.internal:8080')
+    // and the lifecycle fields still take their new values
+    expect(second.token).toBe(first.token)
+    expect(second.port).toBe(6000)
+    expect(second.roots).toEqual(['/tmp/b'])
+  })
+
   it('rotateToken generates a new token and persists it', () => {
     loadOrCreateConfig(dir, { roots: ['/tmp/a'], port: 4173 })
     const rotated = rotateToken(dir)

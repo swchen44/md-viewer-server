@@ -24,7 +24,14 @@ export function loadOrCreateConfig(configDir, { roots, port }) {
   fs.mkdirSync(configDir, { recursive: true })
   const existing = readConfig(configDir)
 
+  // Spread `existing` first so keys this function doesn't know about —
+  // settings written via updateSettings (e.g. plantumlServerUrl) — survive
+  // every `start`. Without this, starting the daemon silently reverts the
+  // user's PlantUML server back to the public default, which is a privacy
+  // regression: PlantUML rendering is the one path that sends document
+  // content to a third party.
   const config = {
+    ...existing,
     token: existing?.token ?? generateToken(),
     port: port ?? existing?.port ?? 4173,
     roots,

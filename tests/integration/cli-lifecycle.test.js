@@ -114,6 +114,34 @@ describe('CLI lifecycle: start -> status -> stop', () => {
     })
     expect(newTokenRes.status).toBe(200)
   })
+
+  it('a re-`start` preserves plantumlServerUrl written via the settings API', async () => {
+    const { stdout: startOut } = await execFileAsync(
+      process.execPath,
+      [CLI_PATH, 'start', '--root', testRoot, '--port', String(TEST_PORT)],
+      { env }
+    )
+    const token = extractToken(startOut)
+
+    const putRes = await fetch(`http://127.0.0.1:${TEST_PORT}/api/settings`, {
+      method: 'PUT',
+      headers: { 'X-Auth-Token': token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plantumlServerUrl: 'http://plantuml.internal:8080' }),
+    })
+    expect(putRes.status).toBe(200)
+
+    // A plain re-`start` (the "already running" no-op path) must not revert it.
+    await execFileAsync(
+      process.execPath,
+      [CLI_PATH, 'start', '--root', testRoot, '--port', String(TEST_PORT)],
+      { env }
+    )
+
+    const getRes = await fetch(`http://127.0.0.1:${TEST_PORT}/api/settings`, {
+      headers: { 'X-Auth-Token': token },
+    })
+    expect((await getRes.json()).plantumlServerUrl).toBe('http://plantuml.internal:8080')
+  })
 })
 
 function extractToken(cliOutput) {
