@@ -51,7 +51,7 @@ describe('runDoctor', () => {
     expect(configCheck.status).toBe('ok')
   })
 
-  it('includes all 10 expected checks', async () => {
+  it('includes all 11 expected checks', async () => {
     loadOrCreateConfig(configDir, { roots: [rootDir], port: 5993 })
     const results = await runDoctor({ configDir, stateDir, roots: [rootDir], port: 5993 })
     const names = results.map((r) => r.name)
@@ -65,7 +65,23 @@ describe('runDoctor', () => {
       'port-available',
       'stale-pid',
       'inotify-limit',
+      'plantuml-reachable',
       'disk-space',
     ])
+  })
+
+  it('reports the configured (non-default) PlantUML server URL reachability, not a hardcoded one', async () => {
+    loadOrCreateConfig(configDir, { roots: [rootDir], port: 5994 })
+    fs.writeFileSync(
+      path.join(configDir, 'config.json'),
+      JSON.stringify({
+        ...JSON.parse(fs.readFileSync(path.join(configDir, 'config.json'), 'utf8')),
+        plantumlServerUrl: 'http://127.0.0.1:1',
+      })
+    )
+    const results = await runDoctor({ configDir, stateDir, roots: [rootDir], port: 5994 })
+    const plantUmlCheck = results.find((r) => r.name === 'plantuml-reachable')
+    expect(plantUmlCheck.message).toContain('127.0.0.1:1')
+    expect(plantUmlCheck.status).toBe('warn')
   })
 })

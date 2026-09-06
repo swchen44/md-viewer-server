@@ -6,6 +6,8 @@ import { createFileRouter } from './api/file.js'
 import { createRenameMkdirRouter } from './api/rename-mkdir.js'
 import { createAssetRouter } from './api/asset.js'
 import { createSearchRouter } from './api/search.js'
+import { createSettingsRouter } from './api/settings.js'
+import { createPlantUmlRouter } from './api/plantuml.js'
 
 export function createApp({
   config,
@@ -15,6 +17,7 @@ export function createApp({
   onShutdown,
   roots = [],
   extensions = [],
+  configDir,
 }) {
   const app = express()
   app.use(express.json({ limit: '10mb' }))
@@ -35,6 +38,8 @@ export function createApp({
   app.use('/api', authMiddleware, createRenameMkdirRouter(roots))
   app.use('/api', authMiddleware, createAssetRouter(roots))
   app.use('/api', authMiddleware, createSearchRouter(roots, extensions))
+  app.use('/api', authMiddleware, createSettingsRouter(configDir))
+  app.use('/api', authMiddleware, createPlantUmlRouter(configDir))
 
   app.post('/api/shutdown', (req, res) => {
     const token = req.header('X-Auth-Token')

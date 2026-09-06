@@ -70,6 +70,7 @@ export function startServer({ logLevel = 'info' } = {}) {
     onShutdown: () => gracefulShutdown('api'),
     roots,
     extensions: FILE_EXTENSIONS,
+    configDir,
   })
 
   const server = http.createServer(app)

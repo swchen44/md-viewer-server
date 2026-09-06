@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import net from 'node:net'
 import path from 'node:path'
 import { readConfig } from './config.js'
+import { readSettings } from './settings.js'
 import { checkHealth } from './daemon-utils.js'
 import { readInotifyLimit } from './inotify-check.js'
 
@@ -101,6 +102,22 @@ function checkInotifyLimit(roots) {
     : { name: 'inotify-limit', status: 'ok', message: `${totalFiles} files, limit ${limit}` }
 }
 
+async function checkPlantUmlReachable(configDir) {
+  const { plantumlServerUrl } = readSettings(configDir)
+  try {
+    const res = await fetch(plantumlServerUrl, { signal: AbortSignal.timeout(3000) })
+    return res.status < 500
+      ? { name: 'plantuml-reachable', status: 'ok', message: `Reachable: ${plantumlServerUrl}` }
+      : {
+          name: 'plantuml-reachable',
+          status: 'warn',
+          message: `Server returned ${res.status}: ${plantumlServerUrl}`,
+        }
+  } catch {
+    return { name: 'plantuml-reachable', status: 'warn', message: `Unreachable: ${plantumlServerUrl}` }
+  }
+}
+
 function checkDiskSpace(stateDir) {
   try {
     const stat = fs.statfsSync(stateDir)
@@ -128,6 +145,7 @@ export async function runDoctor({ configDir, stateDir, roots, port }) {
     await checkPortAvailable(port, daemonRunning),
     checkStalePid(stateDir, daemonRunning),
     checkInotifyLimit(roots),
+    await checkPlantUmlReachable(configDir),
     checkDiskSpace(stateDir),
   ]
 }
