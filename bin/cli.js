@@ -6,6 +6,7 @@ import { runStop } from '../src/server/commands/stop.js'
 import { runDoctor } from '../src/server/doctor.js'
 import { getConfigDir, getStateDir } from '../src/server/xdg-paths.js'
 import { readConfig, rotateToken } from '../src/server/config.js'
+import { checkHealth } from '../src/server/daemon-utils.js'
 
 function printLinks(ips, port, token) {
   const targets = ips.length > 0 ? ips : ['127.0.0.1']
@@ -65,15 +66,24 @@ async function main() {
   )
 
   if (command === 'start') {
+    let wasRunningBeforeRotate = false
     if (shouldRotateToken) {
       try {
         const rotated = rotateToken(getConfigDir())
         console.log(`Token rotated: ${rotated.token}`)
+        wasRunningBeforeRotate = Boolean(await checkHealth(rotated.port))
       } catch (err) {
         console.error(err.message)
         process.exitCode = 1
         return
       }
+    }
+    if (wasRunningBeforeRotate) {
+      // The running daemon read config.json once at startup, so the
+      // rotated token has no effect on it yet. Restart so the freshly
+      // spawned process picks up the new token from the updated config.
+      await runStop()
+      console.log('Token rotated; daemon restarted to apply it.')
     }
     printStartResult(await runStart({ roots, port, debug }))
   } else if (command === 'status') {

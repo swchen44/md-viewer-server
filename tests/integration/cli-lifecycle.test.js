@@ -80,7 +80,47 @@ describe('CLI lifecycle: start -> status -> stop', () => {
     )
     expect(stdout).toContain('Already running')
   })
+
+  it('--rotate-token while running restarts the daemon so the new token takes effect immediately', async () => {
+    const { stdout: startOut } = await execFileAsync(
+      process.execPath,
+      [CLI_PATH, 'start', '--root', testRoot, '--port', String(TEST_PORT)],
+      { env }
+    )
+    const oldToken = extractToken(startOut)
+
+    const oldTokenRes = await fetch(`http://127.0.0.1:${TEST_PORT}/api/roots`, {
+      headers: { 'X-Auth-Token': oldToken },
+    })
+    expect(oldTokenRes.status).toBe(200)
+
+    const { stdout: rotateOut } = await execFileAsync(
+      process.execPath,
+      [CLI_PATH, 'start', '--root', testRoot, '--port', String(TEST_PORT), '--rotate-token'],
+      { env }
+    )
+    expect(rotateOut).toContain('Token rotated:')
+    expect(rotateOut).toContain('daemon restarted to apply it.')
+    const newToken = extractToken(rotateOut)
+    expect(newToken).not.toBe(oldToken)
+
+    const oldTokenAfterRotateRes = await fetch(`http://127.0.0.1:${TEST_PORT}/api/roots`, {
+      headers: { 'X-Auth-Token': oldToken },
+    })
+    expect(oldTokenAfterRotateRes.status).toBe(401)
+
+    const newTokenRes = await fetch(`http://127.0.0.1:${TEST_PORT}/api/roots`, {
+      headers: { 'X-Auth-Token': newToken },
+    })
+    expect(newTokenRes.status).toBe(200)
+  })
 })
+
+function extractToken(cliOutput) {
+  const match = cliOutput.match(/[?&]token=(\d+)/)
+  if (!match) throw new Error(`Could not find a token in CLI output: ${cliOutput}`)
+  return match[1]
+}
 
 describe('dist/bundle.js (built artifact)', () => {
   let configHome
