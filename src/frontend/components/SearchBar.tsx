@@ -3,7 +3,13 @@ import { useTranslation } from 'react-i18next'
 
 export type FilesSearchTarget = 'name' | 'content' | 'both'
 export type FilesSearchScope = 'all' | 'open'
-export type OutlineSearchTarget = 'title' | 'content' | 'both'
+// A heading object only carries {level, text, line} — no document body text is
+// available client-side to match against — so outline search can only ever
+// honestly support a title match. 'content'/'both' are intentionally not
+// offered (see the target-button rendering below): showing them would present
+// non-functional UI, since outline mode's OutlinePanel has no content to
+// filter against without adding a new API call per keystroke.
+export type OutlineSearchTarget = 'title'
 
 export interface FilesSearchOptions {
   target: FilesSearchTarget
@@ -39,23 +45,36 @@ export function SearchBar(props: SearchBarProps) {
   const { mode } = props
   const { t } = useTranslation()
   const [query, setQuery] = useState('')
-  const [target, setTarget] = useState<FilesSearchTarget | OutlineSearchTarget>('both')
+  const [target, setTarget] = useState<FilesSearchTarget | OutlineSearchTarget>(
+    mode === 'outline' ? 'title' : 'both'
+  )
   const [scope, setScope] = useState<FilesSearchScope>('all')
   const [regex, setRegex] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  // Always holds the latest props (in particular `onSearch`), updated on every
+  // render. The debounce timer's callback reads through this ref instead of
+  // closing over `props` directly, so if `onSearch` closes over other state
+  // that resolves after the user starts typing (e.g. App's `roots`, fetched
+  // from GET /api/roots), the debounce still invokes the current callback
+  // when it fires rather than a stale one captured back when the timer was
+  // scheduled.
+  const latestPropsRef = useRef(props)
+  useEffect(() => {
+    latestPropsRef.current = props
+  })
 
   useEffect(() => {
     clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
-      if (props.mode === 'files') {
-        props.onSearch(query, { target: target as FilesSearchTarget, scope, regex })
+      const current = latestPropsRef.current
+      if (current.mode === 'files') {
+        current.onSearch(query, { target: target as FilesSearchTarget, scope, regex })
       } else {
-        props.onSearch(query, { target: target as OutlineSearchTarget, regex })
+        current.onSearch(query, { target: target as OutlineSearchTarget, regex })
       }
     }, DEBOUNCE_MS)
     return () => clearTimeout(timerRef.current)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, target, scope, regex, props.mode])
+  }, [query, target, scope, regex])
 
   // 'name' (files mode) and 'title' (outline mode) are the same UI slot but a
   // different semantic target value + label — a heading has no filename, so
@@ -78,12 +97,16 @@ export function SearchBar(props: SearchBarProps) {
         >
           {nameOrTitleLabel}
         </button>
-        <button aria-pressed={target === 'content'} onClick={() => setTarget('content')}>
-          {t('search.targetContent', 'Content')}
-        </button>
-        <button aria-pressed={target === 'both'} onClick={() => setTarget('both')}>
-          {t('search.targetBoth', 'Both')}
-        </button>
+        {mode === 'files' && (
+          <>
+            <button aria-pressed={target === 'content'} onClick={() => setTarget('content')}>
+              {t('search.targetContent', 'Content')}
+            </button>
+            <button aria-pressed={target === 'both'} onClick={() => setTarget('both')}>
+              {t('search.targetBoth', 'Both')}
+            </button>
+          </>
+        )}
       </div>
       {mode === 'files' && (
         <div>

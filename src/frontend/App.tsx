@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { apiFetch } from './api-client.js'
 import { TopBar } from './components/TopBar.js'
 import { TabBar, type Tab } from './components/TabBar.js'
@@ -14,6 +14,10 @@ export function App() {
   const [roots, setRoots] = useState<Array<{ id: number; name: string }>>([])
   const [fileSearchResults, setFileSearchResults] = useState<FileSearchResults | null>(null)
   const [outlineSearchFilter, setOutlineSearchFilter] = useState<HeadingFilter | null>(null)
+  // Guards against a stale /api/search response (issued per-root, then merged)
+  // overwriting newer state if the user changes/clears the query before an
+  // earlier request finishes — only the most recently issued search may apply.
+  const fileSearchSeqRef = useRef(0)
 
   useEffect(() => {
     apiFetch('/api/roots')
@@ -27,6 +31,19 @@ export function App() {
   }
 
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null
+  // OutlinePanel's fetch effect depends on `activeTab` by reference. Without this,
+  // every outlineSearchFilter update (i.e. every debounced keystroke) re-renders
+  // App and creates a brand-new {rootId, relPath} literal, re-triggering a
+  // GET /api/outline fetch on every search keystroke instead of just re-filtering
+  // the already-loaded headings in memory. Memoize on the actual identifying
+  // values so the reference only changes when the active tab itself changes.
+  const activeOutlineTab = useMemo(
+    () => (activeTab ? { rootId: activeTab.rootId, relPath: activeTab.relPath } : null),
+    // Deliberately keyed on the primitive id/path values rather than `activeTab`
+    // itself — that's the whole point of the memo (see comment above).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeTab?.rootId, activeTab?.relPath]
+  )
 
   function handleJumpToHeading(line: number) {
     // Scrolling to the heading's line is the main-content-view plan's job —
@@ -47,6 +64,8 @@ export function App() {
   }
 
   async function handleFileSearch(query: string, options: FilesSearchOptions) {
+    const seq = ++fileSearchSeqRef.current
+
     if (!query.trim()) {
       setFileSearchResults(null)
       return
@@ -98,6 +117,10 @@ export function App() {
       })
     )
 
+    // A newer search (or a clear) may have started while these per-root
+    // requests were in flight — only the latest request may commit state.
+    if (seq !== fileSearchSeqRef.current) return
+
     setFileSearchResults({
       fileMatches: perRootResults.flatMap((r) => r.fileMatches),
       contentMatches: perRootResults.flatMap((r) => r.contentMatches),
@@ -125,7 +148,7 @@ export function App() {
             <>
               <SearchBar mode="outline" onSearch={handleOutlineSearch} />
               <OutlinePanel
-                activeTab={activeTab ? { rootId: activeTab.rootId, relPath: activeTab.relPath } : null}
+                activeTab={activeOutlineTab}
                 onJumpToHeading={handleJumpToHeading}
                 headingFilter={outlineSearchFilter}
               />

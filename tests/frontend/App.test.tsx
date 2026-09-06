@@ -188,6 +188,116 @@ describe('App search wiring', () => {
     expect(screen.getByTestId('file-tree-panel')).toBeInTheDocument()
   })
 
+  it('ignores a stale /api/search response that resolves after a newer request', async () => {
+    vi.useFakeTimers()
+    let resolveFirst: (res: Response) => void
+    const firstPromise = new Promise<Response>((resolve) => {
+      resolveFirst = resolve
+    })
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/roots')) return Promise.resolve(jsonResponse([{ id: 0, name: 'proj' }]))
+      if (url.includes('/api/files')) return Promise.resolve(jsonResponse({ files: [{ relPath: 'a.md', size: 1, mtimeMs: 1 }] }))
+      if (url.includes('/api/search') && url.includes('q=first')) return firstPromise
+      if (url.includes('/api/search') && url.includes('q=second')) {
+        return Promise.resolve(
+          jsonResponse({ fileMatches: [{ relPath: 'second.md', size: 1, mtimeMs: 1 }], contentMatches: [] })
+        )
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+    await vi.waitFor(() => expect(screen.getByText('a.md')).toBeInTheDocument())
+
+    const input = screen.getByPlaceholderText(/search/i)
+    fireEvent.change(input, { target: { value: 'first' } })
+    await vi.advanceTimersByTimeAsync(300)
+
+    fireEvent.change(input, { target: { value: 'second' } })
+    await vi.advanceTimersByTimeAsync(300)
+    await vi.waitFor(() => expect(screen.getByText('second.md')).toBeInTheDocument())
+
+    // The stale "first" request resolves late — it must not clobber the newer results.
+    resolveFirst!(jsonResponse({ fileMatches: [{ relPath: 'first.md', size: 1, mtimeMs: 1 }], contentMatches: [] }))
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(screen.queryByText('first.md')).not.toBeInTheDocument()
+    expect(screen.getByText('second.md')).toBeInTheDocument()
+  })
+
+  it('SearchBar debounce uses roots that resolve after the user starts typing', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/roots')) {
+        return new Promise<Response>((resolve) => {
+          setTimeout(() => resolve(jsonResponse([{ id: 0, name: 'proj' }])), 50)
+        })
+      }
+      if (url.includes('/api/files')) return Promise.resolve(jsonResponse({ files: [] }))
+      if (url.includes('/api/search')) {
+        return Promise.resolve(
+          jsonResponse({ fileMatches: [{ relPath: 'found.md', size: 1, mtimeMs: 1 }], contentMatches: [] })
+        )
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+    // Type before the (delayed) /api/roots call resolves.
+    fireEvent.change(screen.getByPlaceholderText(/search/i), { target: { value: 'md' } })
+
+    // Let the delayed /api/roots response propagate through a re-render first
+    // (proven by FileTreePanel's own per-root fetch), then let the debounce
+    // timer fire — mirroring the real-world ordering the bug report describes.
+    await vi.advanceTimersByTimeAsync(50)
+    await vi.waitFor(() =>
+      expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/files?root=0'))).toBe(true)
+    )
+
+    await vi.advanceTimersByTimeAsync(300)
+
+    await vi.waitFor(() =>
+      expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/search'))).toBe(true)
+    )
+    await vi.waitFor(() => expect(screen.getByText('found.md')).toBeInTheDocument())
+  })
+
+  it('typing an outline search query does not re-fetch /api/outline (activeTab stays referentially stable)', async () => {
+    vi.useFakeTimers()
+    const fetchMock = stubRoutedFetch([
+      { match: '/api/roots', response: [{ id: 0, name: 'proj' }] },
+      { match: '/api/files', response: { files: [{ relPath: 'a.md', size: 1, mtimeMs: 1 }] } },
+      {
+        match: '/api/outline',
+        response: {
+          headings: [
+            { level: 1, text: 'Intro', line: 1 },
+            { level: 2, text: 'Details', line: 5 },
+          ],
+        },
+      },
+    ])
+    render(<App />)
+    await vi.waitFor(() => expect(screen.getByText('a.md')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('a.md'))
+
+    fireEvent.click(screen.getByRole('button', { name: /outline/i }))
+    await vi.waitFor(() => expect(screen.getByText('Intro')).toBeInTheDocument())
+
+    const outlineCallsBefore = fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/outline')).length
+    expect(outlineCallsBefore).toBe(1)
+
+    fireEvent.change(screen.getByPlaceholderText(/search/i), { target: { value: 'in' } })
+    await vi.advanceTimersByTimeAsync(300)
+    await vi.waitFor(() => expect(screen.queryByText('Details')).not.toBeInTheDocument())
+
+    const outlineCallsAfter = fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/outline')).length
+    expect(outlineCallsAfter).toBe(outlineCallsBefore)
+  })
+
   it('outline-mode search filters headings client-side without calling a search API', async () => {
     vi.useFakeTimers()
     stubRoutedFetch([
