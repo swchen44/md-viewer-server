@@ -1,5 +1,5 @@
 import express from 'express'
-import { readSettings, updateSettings } from '../settings.js'
+import { InvalidSettingsError, readSettings, updateSettings } from '../settings.js'
 
 export function createSettingsRouter(configDir) {
   const router = express.Router()
@@ -10,7 +10,17 @@ export function createSettingsRouter(configDir) {
   })
 
   router.put('/settings', (req, res) => {
-    const updated = updateSettings(configDir, req.body)
+    let updated
+    try {
+      updated = updateSettings(configDir, req.body ?? {})
+    } catch (err) {
+      if (err instanceof InvalidSettingsError) {
+        return res
+          .status(400)
+          .json({ errorCode: 'INVALID_SETTINGS', invalidKeys: err.invalidKeys })
+      }
+      throw err
+    }
     res.set('Content-Type', 'application/json; charset=utf-8')
     res.json(updated)
   })

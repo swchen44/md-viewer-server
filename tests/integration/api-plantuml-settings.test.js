@@ -92,4 +92,22 @@ describe('settings and PlantUML proxy API', () => {
     const res = await request(buildApp()).post('/api/plantuml-proxy').send({})
     expect(res.status).toBe(400)
   })
+
+  it('PUT /api/settings rejects daemon lifecycle keys and leaves config.json untouched', async () => {
+    const configPath = path.join(configDir, 'config.json')
+    const before = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+
+    const res = await request(buildApp())
+      .put('/api/settings')
+      .send({ token: '0000', port: 1, roots: ['/etc'] })
+
+    expect(res.status).toBe(400)
+    expect(res.body.errorCode).toBe('INVALID_SETTINGS')
+    expect(res.body.invalidKeys).toEqual(['token', 'port', 'roots'])
+
+    const after = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+    expect(after.token).toBe(before.token)
+    expect(after.port).toBe(before.port)
+    expect(after.roots).toEqual(before.roots)
+  })
 })
