@@ -695,6 +695,129 @@ describe('App main content, save, draft, and conflict wiring', () => {
     expect(putCallsAfter).toBe(putCallsBefore)
   })
 
+  it('does not resurrect a just-discarded edit when a debounced draft write scheduled before "Discard Mine" was clicked fires afterward', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi.fn().mockImplementation((url: string, options?: RequestInit) => {
+      if (url.includes('/api/roots')) return Promise.resolve(jsonResponse([{ id: 0, name: 'proj' }]))
+      if (url.includes('/api/files'))
+        return Promise.resolve(jsonResponse({ files: [{ relPath: 'a.md', size: 5, mtimeMs: 1 }] }))
+      if (options?.method === 'PUT') {
+        return Promise.resolve(
+          jsonResponse({ errorCode: 'CONFLICT', currentContent: '# External', currentMtimeMs: 99 }, 409)
+        )
+      }
+      if (url.includes('/api/file?')) return Promise.resolve(jsonResponse({ content: '# Hi', mtimeMs: 1, encoding: 'utf-8' }))
+      return Promise.resolve(jsonResponse({}))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+    await vi.waitFor(() => expect(screen.getByText('a.md')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('a.md'))
+    await vi.waitFor(() => expect(screen.getByRole('heading', { name: 'Hi' })).toBeInTheDocument())
+    fireEvent.click(screen.getByTestId('mode-edit'))
+    await vi.waitFor(() => expect(document.querySelector('textarea')).toBeInTheDocument())
+    const textarea = document.querySelector('textarea') as HTMLTextAreaElement
+
+    // First edit + Ctrl+S -> 409 conflict. handleSave already flushes this
+    // edit's pending draft synchronously before the dialog appears, so no
+    // debounce timer survives from this step.
+    fireEvent.change(textarea, { target: { value: '# Hi edited' } })
+    fireEvent.keyDown(textarea, { key: 's', ctrlKey: true })
+    await vi.waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
+
+    // While the (non-modal) ConflictDialog is open, the user types a NEW edit
+    // into the still-interactive editor — this schedules a fresh
+    // 300ms-debounced localStorage write via pendingDraftRef.
+    fireEvent.change(textarea, { target: { value: '# Hi edited again' } })
+
+    // Well within the 300ms window, click Discard Mine. Only advance timers
+    // enough to let the click's own synchronous handler run — not the full
+    // debounce.
+    fireEvent.click(screen.getByRole('button', { name: /discard mine/i }))
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+    // The server's content must be in place and the draft cleared immediately.
+    expect((document.querySelector('textarea') as HTMLTextAreaElement).value).toBe('# External')
+    expect(localStorage.getItem('mvs-draft:0:a.md')).toBeNull()
+
+    // Now let the previously-pending debounced write (from the edit typed
+    // while the dialog was open) fire, if it was never cancelled.
+    await vi.advanceTimersByTimeAsync(300)
+
+    // The discarded edit must NOT have been silently written back to
+    // localStorage.
+    expect(localStorage.getItem('mvs-draft:0:a.md')).toBeNull()
+  })
+
+  it('does not resurrect a spurious draft after "Keep Mine" when a debounced draft write scheduled before the click fires afterward', async () => {
+    vi.useFakeTimers()
+    let putCount = 0
+    const fetchMock = vi.fn().mockImplementation((url: string, options?: RequestInit) => {
+      if (url.includes('/api/roots')) return Promise.resolve(jsonResponse([{ id: 0, name: 'proj' }]))
+      if (url.includes('/api/files'))
+        return Promise.resolve(jsonResponse({ files: [{ relPath: 'a.md', size: 5, mtimeMs: 1 }] }))
+      if (options?.method === 'PUT') {
+        putCount++
+        if (putCount === 1) {
+          return Promise.resolve(
+            jsonResponse({ errorCode: 'CONFLICT', currentContent: '# External', currentMtimeMs: 99 }, 409)
+          )
+        }
+        return Promise.resolve(jsonResponse({ mtimeMs: 100 }))
+      }
+      if (url.includes('/api/file?')) return Promise.resolve(jsonResponse({ content: '# Hi', mtimeMs: 1, encoding: 'utf-8' }))
+      return Promise.resolve(jsonResponse({}))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+    await vi.waitFor(() => expect(screen.getByText('a.md')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('a.md'))
+    await vi.waitFor(() => expect(screen.getByRole('heading', { name: 'Hi' })).toBeInTheDocument())
+    fireEvent.click(screen.getByTestId('mode-edit'))
+    await vi.waitFor(() => expect(document.querySelector('textarea')).toBeInTheDocument())
+    const textarea = document.querySelector('textarea') as HTMLTextAreaElement
+
+    fireEvent.change(textarea, { target: { value: '# Hi edited' } })
+    fireEvent.keyDown(textarea, { key: 's', ctrlKey: true })
+    await vi.waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
+
+    // A new edit while the dialog is open schedules a fresh debounced write —
+    // its value is identical to the tab's current content (handleChange
+    // updates content synchronously), which is exactly what makes this race
+    // easy to miss: a resurrected draft would carry the "right" value, just
+    // written back into localStorage *after* handleKeepMine's clearDraft().
+    fireEvent.change(textarea, { target: { value: '# Hi edited again' } })
+
+    // Click Keep Mine well within the 300ms debounce window.
+    fireEvent.click(screen.getByRole('button', { name: /keep mine/i }))
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.waitFor(() => expect(putCount).toBe(2))
+    await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+    expect(localStorage.getItem('mvs-draft:0:a.md')).toBeNull()
+    expect(screen.getByTestId('tab-bar').textContent).not.toContain('●')
+
+    const secondBody = JSON.parse(
+      (
+        fetchMock.mock.calls.filter(([, opts]) => (opts as RequestInit | undefined)?.method === 'PUT')[1][1] as RequestInit
+      ).body as string
+    )
+    expect(secondBody).toEqual({ content: '# Hi edited again', mtimeMs: 1, force: true })
+
+    // Let the previously-pending debounced write fire, if it was never
+    // flushed before the force-save's clearDraft() ran.
+    await vi.advanceTimersByTimeAsync(300)
+
+    // A stale timer resurrecting the draft here would leave a draft sitting
+    // in localStorage even though the force-save already succeeded and the
+    // tab correctly reads as clean — reopening the file would then wrongly
+    // show it as dirty again.
+    expect(localStorage.getItem('mvs-draft:0:a.md')).toBeNull()
+  })
+
   it('does not resurrect a stale ConflictDialog (or fire an unwanted force-PUT) when a tab with an unresolved 409 conflict is closed and the same file is reopened', async () => {
     const fetchMock = vi.fn().mockImplementation((url: string, options?: RequestInit) => {
       if (url.includes('/api/roots')) return Promise.resolve(jsonResponse([{ id: 0, name: 'proj' }]))

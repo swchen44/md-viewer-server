@@ -177,6 +177,18 @@ export function App() {
     pendingDraftRef.current = null
   }
 
+  // Same timer-clearing mechanism as flushPendingDraft, but WITHOUT writing
+  // the pending value first. Used by handleDiscardMine: the user is
+  // explicitly discarding their local edits, so writing the about-to-be-
+  // discarded content to localStorage only to immediately clearDraft() it
+  // would be pointless — and racy, if the two ever landed in the wrong order.
+  function cancelPendingDraft() {
+    const pending = pendingDraftRef.current
+    if (!pending) return
+    clearTimeout(pending.timeoutId)
+    pendingDraftRef.current = null
+  }
+
   // Flushes on every "stopped looking at this tab" transition: switching the
   // active tab (activeTabId changes), closing the active tab (closeTab clears
   // activeTabId too, which is the same transition), and unmounting. The draft
@@ -302,6 +314,16 @@ export function App() {
 
   async function handleKeepMine() {
     if (!conflict) return
+    // Same guard as handleSave: the non-modal ConflictDialog leaves the
+    // editor interactive, so the user may have typed a new edit (scheduling a
+    // pending debounced localStorage write) after the dialog opened but
+    // before clicking Keep Mine. A force-save should still commit whatever
+    // was most recently typed as the authoritative draft state before
+    // clearing it on success below — flush it now so a later clearDraft()
+    // genuinely has the last word.
+    if (pendingDraftRef.current?.tabId === conflict.tabId) {
+      flushPendingDraft()
+    }
     const tab = tabs.find((t) => t.id === conflict.tabId)
     if (tab) {
       const contentAtForceSaveTime = tab.content
@@ -334,6 +356,16 @@ export function App() {
 
   function handleDiscardMine() {
     if (!conflict) return
+    // Same race as handleKeepMine/handleSave, but the resolution differs: the
+    // user is explicitly discarding their local edits, so a pending debounced
+    // write scheduled while the dialog was open must be CANCELLED rather than
+    // flushed — writing the about-to-be-discarded content to localStorage
+    // first, only to immediately clearDraft() it below, would be pointless
+    // and racy (a stale timer firing after clearDraft() would otherwise
+    // silently resurrect the just-discarded edit).
+    if (pendingDraftRef.current?.tabId === conflict.tabId) {
+      cancelPendingDraft()
+    }
     setTabs((prev) =>
       prev.map((t) =>
         t.id === conflict.tabId
