@@ -21,9 +21,21 @@ describe('initAuthFromUrl', () => {
     expect(window.location.search).toBe('?foo=bar')
   })
 
-  it('prefers an existing sessionStorage token over a URL token', () => {
+  it('prefers a fresh URL token over a stale existing sessionStorage token', () => {
+    // Simulates `start --rotate-token`: the CLI prints a link with the new
+    // token, but the browser tab still has the old token cached from before
+    // rotation. The new URL token must win and overwrite the stale one, or
+    // every subsequent API call 401s with no recovery path.
     sessionStorage.setItem('mvs-token', '9999')
     window.history.replaceState(null, '', '/?token=1234')
+    const token = initAuthFromUrl()
+    expect(token).toBe('1234')
+    expect(sessionStorage.getItem('mvs-token')).toBe('1234')
+  })
+
+  it('falls back to an existing sessionStorage token when there is no URL token', () => {
+    sessionStorage.setItem('mvs-token', '9999')
+    window.history.replaceState(null, '', '/')
     const token = initAuthFromUrl()
     expect(token).toBe('9999')
   })

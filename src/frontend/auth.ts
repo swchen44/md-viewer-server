@@ -19,12 +19,16 @@ export function initAuthFromUrl(): string | null {
     )
   }
 
-  if (existing) return existing
-
+  // A URL token is only ever printed deliberately by the CLI (initial start,
+  // or `--rotate-token` handing out a fresh one), so it takes priority over
+  // whatever may already be cached in sessionStorage from an earlier,
+  // possibly now-invalid, token.
   if (urlToken) {
     sessionStorage.setItem(TOKEN_KEY, urlToken)
     return urlToken
   }
+
+  if (existing) return existing
 
   return null
 }
