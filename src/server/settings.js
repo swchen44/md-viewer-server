@@ -7,7 +7,14 @@ const DEFAULT_PLANTUML_SERVER_URL = 'https://www.plantuml.com/plantuml'
 // roots) that only the CLI owns, and user settings that the UI may change.
 // Only the keys listed here are settings; everything else is rejected so the
 // settings endpoint can never rewrite the daemon's own identity.
-const ALLOWED_SETTINGS_KEYS = ['plantumlServerUrl', 'sendToPlantUmlServer']
+const ALLOWED_SETTINGS_KEYS = [
+  'plantumlServerUrl',
+  'sendToPlantUmlServer',
+  'privacyMode',
+  'blockRemoteContent',
+  'allowHtmlScripts',
+  'bakOnSave',
+]
 
 export class InvalidSettingsError extends Error {
   constructor(message, { invalidKeys = [] } = {}) {
@@ -42,9 +49,26 @@ function assertValidPlantUmlServerUrl(value) {
 
 export function readSettings(configDir) {
   const config = readConfig(configDir) ?? {}
+  const privacyMode = config.privacyMode ?? false
+  const blockRemoteContent = config.blockRemoteContent ?? false
+  const sendToPlantUmlServer = config.sendToPlantUmlServer ?? false
+  const allowHtmlScripts = config.allowHtmlScripts ?? false
+
   return {
     plantumlServerUrl: config.plantumlServerUrl ?? DEFAULT_PLANTUML_SERVER_URL,
-    sendToPlantUmlServer: config.sendToPlantUmlServer ?? false,
+    sendToPlantUmlServer,
+    privacyMode,
+    blockRemoteContent,
+    allowHtmlScripts,
+    bakOnSave: config.bakOnSave ?? false,
+    // Privacy mode locks these three to safe values for any code path that
+    // makes a security-relevant decision. Stored preferences above are left
+    // untouched so disabling privacy mode restores what the user had.
+    effective: {
+      blockRemoteContent: privacyMode ? true : blockRemoteContent,
+      sendToPlantUmlServer: privacyMode ? false : sendToPlantUmlServer,
+      allowHtmlScripts: privacyMode ? false : allowHtmlScripts,
+    },
   }
 }
 

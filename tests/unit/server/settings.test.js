@@ -90,6 +90,61 @@ describe('settings', () => {
     })
   })
 
+  describe('privacy mode effective overrides', () => {
+    it('effective values equal stored values when privacyMode is false', () => {
+      updateSettings(configDir, {
+        blockRemoteContent: false,
+        sendToPlantUmlServer: true,
+        allowHtmlScripts: true,
+      })
+      const settings = readSettings(configDir)
+      expect(settings.effective).toEqual({
+        blockRemoteContent: false,
+        sendToPlantUmlServer: true,
+        allowHtmlScripts: true,
+      })
+    })
+
+    it('forces safe effective values when privacyMode is true, regardless of stored preferences', () => {
+      updateSettings(configDir, {
+        privacyMode: true,
+        blockRemoteContent: false,
+        sendToPlantUmlServer: true,
+        allowHtmlScripts: true,
+      })
+      const settings = readSettings(configDir)
+      expect(settings.effective).toEqual({
+        blockRemoteContent: true,
+        sendToPlantUmlServer: false,
+        allowHtmlScripts: false,
+      })
+      // stored preferences are preserved, not overwritten, so turning privacy mode
+      // back off restores what the user had before
+      expect(settings.blockRemoteContent).toBe(false)
+      expect(settings.sendToPlantUmlServer).toBe(true)
+      expect(settings.allowHtmlScripts).toBe(true)
+    })
+
+    it('defaults privacyMode, blockRemoteContent, allowHtmlScripts, bakOnSave to false', () => {
+      const settings = readSettings(configDir)
+      expect(settings.privacyMode).toBe(false)
+      expect(settings.blockRemoteContent).toBe(false)
+      expect(settings.allowHtmlScripts).toBe(false)
+      expect(settings.bakOnSave).toBe(false)
+    })
+
+    it('accepts the new keys through updateSettings', () => {
+      expect(() =>
+        updateSettings(configDir, {
+          privacyMode: true,
+          blockRemoteContent: true,
+          allowHtmlScripts: false,
+          bakOnSave: true,
+        })
+      ).not.toThrow()
+    })
+  })
+
   describe('plantumlServerUrl validation', () => {
     it('rejects a string that is not a URL at all', () => {
       expect(() => updateSettings(configDir, { plantumlServerUrl: 'not a url' })).toThrow(

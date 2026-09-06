@@ -103,7 +103,8 @@ function checkInotifyLimit(roots) {
 }
 
 async function checkPlantUmlReachable(configDir) {
-  const { plantumlServerUrl, sendToPlantUmlServer } = readSettings(configDir)
+  const { plantumlServerUrl, effective } = readSettings(configDir)
+  const sendToPlantUmlServer = effective.sendToPlantUmlServer
   // Per design check #10 this is conditional: only probe the server when the
   // user has actually opted into sending diagram source to it. Air-gapped
   // installs should never see doctor make a network call, let alone warn.

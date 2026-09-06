@@ -70,7 +70,7 @@ describe('settings and PlantUML proxy API', () => {
     const app = buildApp()
     await request(app)
       .put('/api/settings')
-      .send({ plantumlServerUrl: `http://127.0.0.1:${fakeUpstreamPort}` })
+      .send({ plantumlServerUrl: `http://127.0.0.1:${fakeUpstreamPort}`, sendToPlantUmlServer: true })
 
     const res = await request(app)
       .post('/api/plantuml-proxy')
@@ -86,7 +86,7 @@ describe('settings and PlantUML proxy API', () => {
     const app = buildApp()
     await request(app)
       .put('/api/settings')
-      .send({ plantumlServerUrl: `http://127.0.0.1:${fakeUpstreamPort}` })
+      .send({ plantumlServerUrl: `http://127.0.0.1:${fakeUpstreamPort}`, sendToPlantUmlServer: true })
 
     const res = await request(app)
       .post('/api/plantuml-proxy')
@@ -100,7 +100,9 @@ describe('settings and PlantUML proxy API', () => {
 
   it('returns 502 when the upstream PlantUML server is unreachable', async () => {
     const app = buildApp()
-    await request(app).put('/api/settings').send({ plantumlServerUrl: 'http://127.0.0.1:1' })
+    await request(app)
+      .put('/api/settings')
+      .send({ plantumlServerUrl: 'http://127.0.0.1:1', sendToPlantUmlServer: true })
 
     const res = await request(app)
       .post('/api/plantuml-proxy')
@@ -113,6 +115,43 @@ describe('settings and PlantUML proxy API', () => {
   it('returns 400 when source is missing from the request body', async () => {
     const res = await request(buildApp()).post('/api/plantuml-proxy').send({})
     expect(res.status).toBe(400)
+  })
+
+  it('returns 403 PLANTUML_DISABLED and makes no upstream request when sendToPlantUmlServer is off', async () => {
+    let hits = 0
+    fakeUpstream.on('request', () => {
+      hits++
+    })
+    const app = buildApp()
+    await request(app)
+      .put('/api/settings')
+      .send({ plantumlServerUrl: `http://127.0.0.1:${fakeUpstreamPort}`, sendToPlantUmlServer: false })
+
+    const res = await request(app)
+      .post('/api/plantuml-proxy')
+      .send({ source: '@startuml\nA -> B\n@enduml' })
+
+    expect(res.status).toBe(403)
+    expect(res.body.errorCode).toBe('PLANTUML_DISABLED')
+    expect(hits).toBe(0)
+  })
+
+  it('returns 403 when privacyMode forces sendToPlantUmlServer off even if the stored preference is true', async () => {
+    const app = buildApp()
+    await request(app)
+      .put('/api/settings')
+      .send({
+        plantumlServerUrl: `http://127.0.0.1:${fakeUpstreamPort}`,
+        sendToPlantUmlServer: true,
+        privacyMode: true,
+      })
+
+    const res = await request(app)
+      .post('/api/plantuml-proxy')
+      .send({ source: '@startuml\nA -> B\n@enduml' })
+
+    expect(res.status).toBe(403)
+    expect(res.body.errorCode).toBe('PLANTUML_DISABLED')
   })
 
   it('PUT /api/settings rejects daemon lifecycle keys and leaves config.json untouched', async () => {

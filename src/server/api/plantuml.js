@@ -11,7 +11,11 @@ export function createPlantUmlRouter(configDir) {
       return res.status(400).json({ errorCode: 'MISSING_SOURCE' })
     }
 
-    const { plantumlServerUrl } = readSettings(configDir)
+    const settings = readSettings(configDir)
+    if (!settings.effective.sendToPlantUmlServer) {
+      return res.status(403).json({ errorCode: 'PLANTUML_DISABLED' })
+    }
+    const { plantumlServerUrl } = settings
     const encoded = encodePlantUmlText(source)
     const upstreamUrl = `${plantumlServerUrl}/png/${encoded}`
 
