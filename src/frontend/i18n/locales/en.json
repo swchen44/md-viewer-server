@@ -23,5 +23,9 @@
     "message": "This file was modified externally while you were editing it.",
     "keepMine": "Keep mine and overwrite",
     "discardMine": "Discard mine, reload latest"
+  },
+  "tabContent": {
+    "loading": "Loading...",
+    "loadError": "Failed to load this file"
   }
 }

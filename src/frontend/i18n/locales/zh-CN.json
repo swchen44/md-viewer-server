@@ -23,5 +23,9 @@
     "message": "在您编辑期间,此文件已被外部修改。",
     "keepMine": "保留我的修改并覆盖",
     "discardMine": "放弃我的修改,重新载入最新版本"
+  },
+  "tabContent": {
+    "loading": "载入中...",
+    "loadError": "此文件载入失败"
   }
 }

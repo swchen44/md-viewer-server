@@ -1,4 +1,5 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { Tab } from '../types.js'
 import { apiFetch } from '../api-client.js'
 import { MarkdownView } from './MarkdownView.js'
@@ -15,6 +16,22 @@ interface TabContentProps {
 }
 
 export function TabContent({ tab, onContentLoaded, onChange, onSave, allowHtmlScripts }: TabContentProps) {
+  const { t } = useTranslation()
+  const [loadError, setLoadError] = useState(false)
+
+  // The tab can be swapped for a different file (different rootId/relPath)
+  // while a previous tab's fetch failed and left loadError set — reset it
+  // during render (the same "adjust state when a prop changes" pattern
+  // already established in OutlinePanel/SearchBar/useSearchHistory/
+  // useDraft), so a stale error from the OLD tab never briefly flashes for
+  // the NEW one before its own fetch has even started.
+  const tabKey = `${tab.rootId}:${tab.relPath}`
+  const [prevTabKey, setPrevTabKey] = useState(tabKey)
+  if (prevTabKey !== tabKey) {
+    setPrevTabKey(tabKey)
+    setLoadError(false)
+  }
+
   // Fetches once per tab, guarded by tab.content === null. The `cancelled`
   // flag is scoped per effect invocation (a fresh closure each time the
   // effect re-runs), so if `tab` changes to a different file before this
@@ -24,18 +41,21 @@ export function TabContent({ tab, onContentLoaded, onChange, onSave, allowHtmlSc
   // onContentLoaded for the wrong tab, even though onContentLoaded itself
   // carries no tab identifier: correctness here comes from the guard
   // suppressing stale deliveries, not from the parent disambiguating them.
-  // Unlike OutlinePanel/MermaidBlock, TabContent holds no local state
-  // derived from the fetch (the loaded content lives in the parent's Tab,
-  // reported upward via onContentLoaded), so there is no on-screen state to
-  // reset during render while a new fetch is in flight — the "Loading..."
-  // fallback below is driven directly by the current tab.content prop.
   useEffect(() => {
     if (tab.content !== null) return
     let cancelled = false
     apiFetch(`/api/file?root=${tab.rootId}&path=${encodeURIComponent(tab.relPath)}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (!cancelled) onContentLoaded(data.content, data.mtimeMs, data.encoding)
+      .then(async (res) => {
+        const data = await res.json()
+        if (cancelled) return
+        if (!res.ok) {
+          setLoadError(true)
+          return
+        }
+        onContentLoaded(data.content, data.mtimeMs, data.encoding)
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError(true)
       })
     return () => {
       cancelled = true
@@ -43,8 +63,12 @@ export function TabContent({ tab, onContentLoaded, onChange, onSave, allowHtmlSc
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab.rootId, tab.relPath, tab.content])
 
+  if (loadError) {
+    return <div>{t('tabContent.loadError', 'Failed to load this file')}</div>
+  }
+
   if (tab.content === null) {
-    return <div>Loading...</div>
+    return <div>{t('tabContent.loading', 'Loading...')}</div>
   }
 
   const isHtml = tab.relPath.endsWith('.html')

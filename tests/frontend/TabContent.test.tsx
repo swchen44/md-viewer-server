@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import { TabContent } from '../../src/frontend/components/TabContent.js'
 import type { Tab } from '../../src/frontend/types.js'
+import en from '../../src/frontend/i18n/locales/en.json'
 
 function makeTab(overrides: Partial<Tab> = {}): Tab {
   return {
@@ -82,5 +83,42 @@ describe('TabContent', () => {
       />
     )
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+  })
+
+  it('shows a translated loading message, not a hardcoded English literal', () => {
+    // Never resolves within the test's lifetime — only the transient loading
+    // state (rendered before any fetch settles) is under test here.
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(new Promise(() => {})))
+    render(
+      <TabContent
+        tab={makeTab()}
+        onContentLoaded={() => {}}
+        onChange={() => {}}
+        onSave={() => {}}
+        allowHtmlScripts={false}
+      />
+    )
+    expect(screen.getByText(en.tabContent.loading)).toBeInTheDocument()
+  })
+
+  it('shows an error state instead of crashing when GET /api/file returns a non-ok response', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ errorCode: 'FILE_NOT_FOUND' }), { status: 404 })
+      )
+    )
+    const onContentLoaded = vi.fn()
+    render(
+      <TabContent
+        tab={makeTab()}
+        onContentLoaded={onContentLoaded}
+        onChange={() => {}}
+        onSave={() => {}}
+        allowHtmlScripts={false}
+      />
+    )
+    await waitFor(() => expect(screen.getByText(/failed to load/i)).toBeInTheDocument())
+    expect(onContentLoaded).not.toHaveBeenCalled()
   })
 })
