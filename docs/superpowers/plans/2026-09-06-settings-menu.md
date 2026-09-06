@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 建立分類式設定選單（一般／外觀／自訂 CSS，仿 md-reader），涵蓋隱私模式總開關與鎖定邏輯、PlantUML 伺服器設定、CSS 範本管理。這是 `/goal` 六個子計畫中的最後一個，完成後主要的使用者可見功能全部到位。
+**Goal:** 建立分類式設定選單（一般／外觀／自訂 CSS，仿 md-reader），涵蓋隱私模式總開關與鎖定邏輯、PlantUML 伺服器設定、CSS 四選一（兩個唯讀內建範本 + 兩個可編輯的個人 slot）。這是 `/goal` 六個子計畫中的最後一個，完成後主要的使用者可見功能全部到位。
 
 **Architecture:** 設定分兩種持久化層級：
-1. **後端 config.json（`GET/PUT /api/settings`，Plan 4 已建立雛形）**：只放「會影響伺服器行為或安全姿態」的設定——`privacyMode`、`blockRemoteContent`、`plantumlServerUrl`、`sendToPlantUmlServer`、`allowHtmlScripts`、`bakOnSave`。這些設定需要跨裝置/瀏覽器一致（同一台 daemon 可能被多個瀏覽器分頁連線），且隱私鎖定必須在伺服器端也強制生效，不能只靠前端 UI disable 掉開關就假裝安全。
+1. **後端 config.json（`GET/PUT /api/settings`，Plan 4 已建立雛形）**：只放「會影響伺服器行為或安全姿態，或屬於使用者想長期保存的個人設定」的設定——`privacyMode`、`blockRemoteContent`、`plantumlServerUrl`、`sendToPlantUmlServer`、`allowHtmlScripts`、`bakOnSave`，以及 CSS 選擇狀態 `customCssChoice`/`customCssUser1`/`customCssUser2`（見下方 CSS 設計調整）。這些設定需要跨裝置/瀏覽器一致（同一台 daemon 可能被多個瀏覽器分頁連線），且隱私鎖定必須在伺服器端也強制生效，不能只靠前端 UI disable 掉開關就假裝安全。
 2. **前端 localStorage（新 `useLocalPrefs` hook）**：純顯示/裝置本地偏好——主題、accent color、編輯器字型大小/縮排、顯示隱藏檔、大綱側邊欄預設摺疊、字元集相容模式、即時更新開關、`.txt` 是否當 Markdown 渲染、換行風格。這些不影響資料安全，且沒有跨裝置同步的必要。
 
-CSS 自訂範本（`css-presets.json`）是第三種持久化：存在後端 XDG Config 目錄，但內容只是純文字範本庫，不是「設定值」，走獨立的 `GET/POST /api/css-presets` API（spec 已定義）。
+**CSS 設計調整（2026-09-06，執行前修改，尚未動工零成本）**：原始 spec 設想的是一個可持續累積的範本庫（`css-presets.json` + `GET/POST /api/css-presets`）。使用者參考了姊妹專案 `md-reader` 已經上線、測試過的「四選一」模型（`docs/superpowers/plans/2026-09-06-css-slots-search-history.md`），決定改用同一套更簡單的設計：固定四個選項——`editorial`/`developer` 兩個內建範本（唯讀，可選可看不可改）、`user1`/`user2` 兩個個人 slot（可編輯，選取後編輯框顯示該 slot 內容，按「套用」才會寫回並生效）。這比原本的成長式範本庫更簡單，也不需要獨立的 `css-presets.json` 檔案或 API——四個選項的狀態整個併入既有的 flat settings 模型（`customCssChoice: 'editorial'|'developer'|'user1'|'user2'`、`customCssUser1: string`、`customCssUser2: string`），兩個內建範本的 CSS 內容變成程式碼裡的常數（不是可成長的檔案）。**因為 Plan 7 從未開始實作，這個設計改動零重工成本，直接反映在下面的 Task 2/8 裡，不再有獨立的「CSS 範本後端」task。**
 
 **Tech Stack:** 沿用既有 React + TypeScript + Vitest 前端與 Express 後端，不新增套件。
 
@@ -27,11 +27,10 @@ CSS 自訂範本（`css-presets.json`）是第三種持久化：存在後端 XDG
 
 ```
 src/server/
-├── settings.js                    ← 擴充新欄位 + effective 覆寫邏輯（Modify）
-├── css-presets.js                    ← 新建：讀取/新增 CSS 範本 + 首次啟動種子範本
+├── settings.js                    ← 擴充新欄位（含 CSS 選擇狀態）+ effective 覆寫邏輯（Modify）
+├── custom-css-presets.js             ← 新建：兩個內建範本的 CSS 常數 + resolveCustomCss() 解析目前生效內容
 ├── api/
 │   ├── settings.js                     ← 既有路由不變
-│   ├── css-presets.js                   ← 新建：GET/POST /api/css-presets
 │   └── plantuml.js                       ← 修正：檢查 effective.sendToPlantUmlServer（Modify）
 └── doctor.js                               ← 修正：PlantUML 檢查改讀 effective.*（Modify）
 
@@ -50,8 +49,7 @@ src/frontend/
 └── i18n/locales/*.json                                     ← 各 task 隨需擴充 settings.* 翻譯鍵
 
 tests/unit/server/
-├── settings.test.js（既有，擴充）
-└── css-presets.test.js（新建）
+└── settings.test.js（既有，擴充：privacy 欄位 + CSS 選擇狀態欄位）
 
 tests/integration/
 └── api-plantuml.test.js（既有，擴充 disabled 案例）— 若不存在則於 Task 1 建立最小案例
@@ -275,115 +273,113 @@ EOF
 
 ---
 
-### Task 2: CSS 範本後端（`css-presets.json` + API）
+### Task 2: CSS 選擇狀態後端（四選一：兩個唯讀內建範本 + 兩個可編輯個人 slot）
 
 **Files:**
-- Create: `src/server/css-presets.js`
-- Create: `src/server/api/css-presets.js`
-- Modify: `src/server/app.js`（或既有掛載路由的檔案，掛上新 router）
-- Test: `tests/unit/server/css-presets.test.js`
-- Test: 擴充 integration 測試涵蓋 `GET`/`POST /api/css-presets`
+- Create: `src/server/custom-css-presets.js`
+- Modify: `src/server/settings.js`
+- Test: `tests/unit/server/settings.test.js`（擴充）
+- Test: `tests/unit/server/custom-css-presets.test.js`
 
 **Interfaces:**
-- `readCssPresets(configDir)`: 回傳 `Array<{id: string, name: string, css: string}>`；檔案不存在時，建立並寫入兩個預設範本（`editorial`、`developer`，selector 使用 `.markdown-body` 前綴）後回傳
-- `createCssPreset(configDir, {name, css})`: 新增一筆（`id` 用 `crypto.randomUUID()`），寫回檔案，回傳更新後的完整清單
-- `GET /api/css-presets` → `readCssPresets`；`POST /api/css-presets` → `createCssPreset`，缺 `name`/`css` 回 `400 { errorCode: 'INVALID_PRESET' }`
+- `custom-css-presets.js` 匯出 `EDITORIAL_CSS: string`、`DEVELOPER_CSS: string`（兩個內建範本的 CSS 內容，selector 使用 `.markdown-body` 前綴，從 md-reader 移植）、`type CustomCssChoice = 'editorial' | 'developer' | 'user1' | 'user2'`、`resolveCustomCssChoice({customCssChoice, customCssUser1, customCssUser2}): {choice: CustomCssChoice, draft: string, readonly: boolean}`——`editorial`/`developer` 回傳對應常數且 `readonly: true`；`user1`/`user2` 回傳對應 slot 內容（可能是空字串）且 `readonly: false`
+- `settings.js` 的 `ALLOWED_SETTINGS_KEYS` 新增 `'customCssChoice', 'customCssUser1', 'customCssUser2'`；`readSettings` 回傳這三個欄位，預設 `customCssChoice: 'user1'`、`customCssUser1: ''`、`customCssUser2: ''`
 
 - [ ] **Step 1: 寫失敗測試**
 
-`tests/unit/server/css-presets.test.js`:
+`tests/unit/server/custom-css-presets.test.js`:
 
 ```js
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import fs from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
-import { readCssPresets, createCssPreset } from '../../../src/server/css-presets.js'
+import { describe, it, expect } from 'vitest'
+import {
+  EDITORIAL_CSS,
+  DEVELOPER_CSS,
+  resolveCustomCssChoice,
+} from '../../../src/server/custom-css-presets.js'
 
-describe('css-presets', () => {
-  let configDir
+describe('resolveCustomCssChoice', () => {
+  it('built-in choices are readonly and return the constant CSS', () => {
+    const editorial = resolveCustomCssChoice({
+      customCssChoice: 'editorial',
+      customCssUser1: 'ignored',
+      customCssUser2: 'ignored',
+    })
+    expect(editorial).toEqual({ choice: 'editorial', draft: EDITORIAL_CSS, readonly: true })
 
-  beforeEach(() => {
-    configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'css-presets-test-'))
+    const developer = resolveCustomCssChoice({
+      customCssChoice: 'developer',
+      customCssUser1: '',
+      customCssUser2: '',
+    })
+    expect(developer).toEqual({ choice: 'developer', draft: DEVELOPER_CSS, readonly: true })
   })
 
-  afterEach(() => {
-    fs.rmSync(configDir, { recursive: true, force: true })
+  it('user choices are editable and return that slot\'s stored content', () => {
+    expect(
+      resolveCustomCssChoice({ customCssChoice: 'user1', customCssUser1: 'one', customCssUser2: 'two' })
+    ).toEqual({ choice: 'user1', draft: 'one', readonly: false })
+
+    expect(
+      resolveCustomCssChoice({ customCssChoice: 'user2', customCssUser1: 'one', customCssUser2: 'two' })
+    ).toEqual({ choice: 'user2', draft: 'two', readonly: false })
   })
 
-  it('seeds two default presets on first read when the file does not exist', () => {
-    const presets = readCssPresets(configDir)
-    expect(presets).toHaveLength(2)
-    expect(presets.map((p) => p.name)).toEqual(expect.arrayContaining(['editorial', 'developer']))
-    expect(fs.existsSync(path.join(configDir, 'css-presets.json'))).toBe(true)
+  it('an empty user slot resolves to an empty draft, not the built-in CSS', () => {
+    expect(
+      resolveCustomCssChoice({ customCssChoice: 'user1', customCssUser1: '', customCssUser2: '' })
+    ).toEqual({ choice: 'user1', draft: '', readonly: false })
   })
 
-  it('seeded preset selectors are scoped to the markdown-body container', () => {
-    const presets = readCssPresets(configDir)
-    for (const preset of presets) {
-      expect(preset.css).toMatch(/\.markdown-body/)
-    }
+  it('built-in preset CSS is scoped to the markdown-body container', () => {
+    expect(EDITORIAL_CSS).toMatch(/\.markdown-body/)
+    expect(DEVELOPER_CSS).toMatch(/\.markdown-body/)
   })
+})
+```
 
-  it('does not reseed on a second read (preserves user edits/deletions)', () => {
-    readCssPresets(configDir)
-    fs.writeFileSync(path.join(configDir, 'css-presets.json'), JSON.stringify([]))
-    expect(readCssPresets(configDir)).toEqual([])
-  })
+在 `tests/unit/server/settings.test.js` 加入：
 
-  it('createCssPreset appends a new preset with a generated id', () => {
-    readCssPresets(configDir)
-    const updated = createCssPreset(configDir, { name: 'my-theme', css: '.markdown-body { color: red; }' })
-    expect(updated).toHaveLength(3)
-    const created = updated.find((p) => p.name === 'my-theme')
-    expect(created).toBeDefined()
-    expect(typeof created.id).toBe('string')
-    expect(created.id.length).toBeGreaterThan(0)
-  })
+```js
+it('defaults CSS choice to user1 with empty slots', () => {
+  const settings = readSettings(configDir)
+  expect(settings.customCssChoice).toBe('user1')
+  expect(settings.customCssUser1).toBe('')
+  expect(settings.customCssUser2).toBe('')
+})
 
-  it('createCssPreset persists across reads', () => {
-    createCssPreset(configDir, { name: 'x', css: '.markdown-body {}' })
-    const presets = readCssPresets(configDir)
-    expect(presets.some((p) => p.name === 'x')).toBe(true)
+it('accepts CSS choice fields through updateSettings', () => {
+  updateSettings(configDir, {
+    customCssChoice: 'user2',
+    customCssUser1: '.markdown-body { color: blue; }',
+    customCssUser2: '.markdown-body { color: green; }',
   })
+  const settings = readSettings(configDir)
+  expect(settings.customCssChoice).toBe('user2')
+  expect(settings.customCssUser1).toBe('.markdown-body { color: blue; }')
+  expect(settings.customCssUser2).toBe('.markdown-body { color: green; }')
 })
 ```
 
 - [ ] **Step 2: 執行測試確認失敗**
 
-Run: `npm run test:unit -- css-presets.test.js`
-Expected: FAIL — module not found
+Run: `npm run test:unit -- custom-css-presets.test.js settings.test.js`
+Expected: FAIL
 
 - [ ] **Step 3: 實作**
 
-`src/server/css-presets.js`:
+`src/server/custom-css-presets.js`（CSS 內容從 md-reader 的 `src/config/custom-css-presets.ts` 移植，selector 換成本專案的 `.markdown-body` 容器）：
 
 ```js
-import fs from 'node:fs'
-import path from 'node:path'
-import crypto from 'node:crypto'
-
-function getCssPresetsPath(configDir) {
-  return path.join(configDir, 'css-presets.json')
-}
-
-const DEFAULT_PRESETS = [
-  {
-    id: 'editorial',
-    name: 'editorial',
-    css: `.markdown-body {
+export const EDITORIAL_CSS = `.markdown-body {
   background: #f5f1e8;
   font-family: Georgia, 'Times New Roman', serif;
 }
 .markdown-body h1, .markdown-body h2 {
   font-family: Georgia, serif;
   font-size: 2.2em;
-}`,
-  },
-  {
-    id: 'developer',
-    name: 'developer',
-    css: `.markdown-body {
+}`
+
+export const DEVELOPER_CSS = `.markdown-body {
   background: #1e1e1e;
   color: #d4d4d4;
 }
@@ -391,92 +387,35 @@ const DEFAULT_PRESETS = [
   background: #0d0d0d;
   color: #9cdcfe;
   font-family: 'Fira Code', monospace;
-}`,
-  },
-]
+}`
 
-export function readCssPresets(configDir) {
-  const filePath = getCssPresetsPath(configDir)
-  if (!fs.existsSync(filePath)) {
-    fs.mkdirSync(configDir, { recursive: true })
-    fs.writeFileSync(filePath, JSON.stringify(DEFAULT_PRESETS, null, 2))
-    return DEFAULT_PRESETS
+export function resolveCustomCssChoice({ customCssChoice, customCssUser1, customCssUser2 }) {
+  if (customCssChoice === 'editorial') {
+    return { choice: 'editorial', draft: EDITORIAL_CSS, readonly: true }
   }
-  return JSON.parse(fs.readFileSync(filePath, 'utf-8'))
-}
-
-export function createCssPreset(configDir, { name, css }) {
-  const presets = readCssPresets(configDir)
-  const preset = { id: crypto.randomUUID(), name, css }
-  const updated = [...presets, preset]
-  fs.writeFileSync(getCssPresetsPath(configDir), JSON.stringify(updated, null, 2))
-  return updated
+  if (customCssChoice === 'developer') {
+    return { choice: 'developer', draft: DEVELOPER_CSS, readonly: true }
+  }
+  if (customCssChoice === 'user2') {
+    return { choice: 'user2', draft: customCssUser2 ?? '', readonly: false }
+  }
+  return { choice: 'user1', draft: customCssUser1 ?? '', readonly: false }
 }
 ```
 
-`src/server/api/css-presets.js`:
+`src/server/settings.js`：把 `ALLOWED_SETTINGS_KEYS` 加上 `'customCssChoice', 'customCssUser1', 'customCssUser2'`，`readSettings` 回傳物件加上：
 
 ```js
-import express from 'express'
-import { readCssPresets, createCssPreset } from '../css-presets.js'
-
-export function createCssPresetsRouter(configDir) {
-  const router = express.Router()
-
-  router.get('/css-presets', (req, res) => {
-    res.json(readCssPresets(configDir))
-  })
-
-  router.post('/css-presets', (req, res) => {
-    const { name, css } = req.body
-    if (!name || typeof name !== 'string' || typeof css !== 'string') {
-      return res.status(400).json({ errorCode: 'INVALID_PRESET' })
-    }
-    res.status(201).json(createCssPreset(configDir, { name, css }))
-  })
-
-  return router
-}
+customCssChoice: config.customCssChoice ?? 'user1',
+customCssUser1: config.customCssUser1 ?? '',
+customCssUser2: config.customCssUser2 ?? '',
 ```
 
-在掛載其他 API router 的地方（找 `createPlantUmlRouter`/`createSettingsRouter` 掛載處，通常在 `src/server/app.js`）加入：
-
-```js
-app.use('/api', authMiddleware(config.token), createCssPresetsRouter(configDir))
-```
-
-（實作者請對照現有 router 掛載方式與中介層順序調整，維持既有的認證中介層覆蓋範圍。）
+（不需要對 `customCssChoice`/`customCssUser1`/`customCssUser2` 做特別的值驗證——`customCssChoice` 若收到不合法字串，`resolveCustomCssChoice` 的 fallback 分支會安全地當成 `user1` 處理，不會因為壞值而炸掉；CSS 內容本身是純文字，不需要語法驗證。）
 
 - [ ] **Step 4: 執行測試確認通過**
 
-Run: `npm run test:unit -- css-presets.test.js`
-Expected: PASS（5 個測試）
-
-擴充 integration 測試檔（找到既有掛載其他 API router 的 integration 測試檔案，仿照其結構加入）：
-
-```js
-it('GET /api/css-presets returns the seeded defaults', async () => {
-  const res = await request(app).get('/api/css-presets').set('X-Auth-Token', token)
-  expect(res.status).toBe(200)
-  expect(res.body).toHaveLength(2)
-})
-
-it('POST /api/css-presets requires auth', async () => {
-  const res = await request(app).post('/api/css-presets').send({ name: 'x', css: '.markdown-body{}' })
-  expect(res.status).toBe(401)
-})
-
-it('POST /api/css-presets rejects a missing css field', async () => {
-  const res = await request(app)
-    .post('/api/css-presets')
-    .set('X-Auth-Token', token)
-    .send({ name: 'x' })
-  expect(res.status).toBe(400)
-  expect(res.body.errorCode).toBe('INVALID_PRESET')
-})
-```
-
-Run: `npm run test:integration -- css-presets`
+Run: `npm run test:unit -- custom-css-presets.test.js settings.test.js`
 Expected: PASS
 
 - [ ] **Step 5: Codex code review**
@@ -486,23 +425,25 @@ Run: `/codex:review --base <prev-commit-sha>`. 修正任何 Critical/Important �
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/server/css-presets.js src/server/api/css-presets.js src/server/app.js tests/unit/server/css-presets.test.js tests/integration/*.test.js
+git add src/server/custom-css-presets.js src/server/settings.js tests/unit/server/custom-css-presets.test.js tests/unit/server/settings.test.js
 git commit -m "$(cat <<'EOF'
-Add CSS preset storage and GET/POST /api/css-presets
+Add four-way CSS choice state (two readonly presets, two editable slots)
 
-Why: The design spec's custom-CSS settings tab needs a growable
-template library persisted server-side (XDG config), not hardcoded
-in the frontend, so a user's saved presets survive across browsers
-and reinstalls of the frontend bundle.
-What: css-presets.js seeds css-presets.json with two presets ported
-from md-reader (editorial, developer) on first read if the file
-doesn't exist yet, and never reseeds afterward (so user edits/
-deletions stick). GET returns the current list; POST appends a new
-preset with a generated id.
-How: Selectors in the seeded presets are scoped to .markdown-body so
-they only affect the article-rendering container, matching the
-constraint that custom CSS must not leak into the app's own chrome
-(sidebar, tab bar, settings modal).
+Why: Ported from the sibling md-reader project's already-shipped
+design (docs/superpowers/plans/2026-09-06-css-slots-search-history.md
+in that repo) at the user's request, replacing this plan's original
+growable-preset-library design (a separate css-presets.json + REST
+API) before any of it was implemented — a simpler fixed-choice model
+with built-ins that are explicitly viewable-but-not-editable.
+What: customCssChoice/customCssUser1/customCssUser2 added to the flat
+settings model (same ALLOWED_SETTINGS_KEYS pattern as every other
+setting). resolveCustomCssChoice() returns the effective draft CSS
+and a readonly flag for whichever choice is active — built-in choices
+resolve to a hardcoded constant and readonly:true; user slots resolve
+to their own stored (possibly empty) content and readonly:false.
+How: No separate storage file or API needed — this fits entirely into
+the existing settings.js/config.json mechanism already used for every
+other durable per-daemon setting.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01KCkr3UUhi36YHAEiAAhp5L
@@ -519,7 +460,7 @@ EOF
 - Test: `tests/frontend/useSettings.test.ts`
 
 **Interfaces:**
-- Produces: `useSettings()` → `{settings: Settings | null, updateSettings: (patch: Partial<Settings>) => Promise<void>, error: string | null}`, where `Settings` mirrors the backend shape from Task 1 (`plantumlServerUrl`, `sendToPlantUmlServer`, `privacyMode`, `blockRemoteContent`, `allowHtmlScripts`, `bakOnSave`, `effective: {...}`). Fetches `GET /api/settings` on mount; `updateSettings` calls `PUT /api/settings` with the patch and updates local state with the response
+- Produces: `useSettings()` → `{settings: Settings | null, updateSettings: (patch: Partial<Settings>) => Promise<void>, error: string | null}`, where `Settings` mirrors the backend shape from Tasks 1-2 (`plantumlServerUrl`, `sendToPlantUmlServer`, `privacyMode`, `blockRemoteContent`, `allowHtmlScripts`, `bakOnSave`, `customCssChoice`, `customCssUser1`, `customCssUser2`, `effective: {...}`). Fetches `GET /api/settings` on mount; `updateSettings` calls `PUT /api/settings` with the patch and updates local state with the response
 
 - [ ] **Step 1: 寫失敗測試**
 
@@ -538,6 +479,9 @@ function settingsResponse(overrides = {}) {
     blockRemoteContent: false,
     allowHtmlScripts: false,
     bakOnSave: false,
+    customCssChoice: 'user1',
+    customCssUser1: '',
+    customCssUser2: '',
     effective: { blockRemoteContent: false, sendToPlantUmlServer: false, allowHtmlScripts: false },
     ...overrides,
   }
@@ -611,6 +555,8 @@ Expected: FAIL — module not found
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../api-client.js'
 
+export type CustomCssChoice = 'editorial' | 'developer' | 'user1' | 'user2'
+
 export interface Settings {
   plantumlServerUrl: string
   sendToPlantUmlServer: boolean
@@ -618,6 +564,9 @@ export interface Settings {
   blockRemoteContent: boolean
   allowHtmlScripts: boolean
   bakOnSave: boolean
+  customCssChoice: CustomCssChoice
+  customCssUser1: string
+  customCssUser2: string
   effective: {
     blockRemoteContent: boolean
     sendToPlantUmlServer: boolean
@@ -1047,6 +996,8 @@ EOF
 ---
 
 ### Task 6: 一般分頁（含隱私區塊）
+
+> **跨計畫待辦**：`docs/superpowers/plans/2026-09-06-toolbar-extras.md` 的 Task 5 已經在後端加了 `checkForUpdates` 設定欄位（預設 `false`，同 `sendToPlantUmlServer` 的模式），但那份計畫刻意沒有做設定 UI。實作這個 Task 時，請在下面的一般分頁裡順手加一個 `checkForUpdates` 開關（`updateSettings({checkForUpdates: e.target.checked})`），對應 i18n 鍵可取 `settings.checkForUpdates`（"Check for updates"）。這不是這個 task 原本規劃的一部分，但屬於同一種「後端 setting 已存在、缺一個 UI 開關」的收尾工作，一起做完成本更低。
 
 **Files:**
 - Create: `src/frontend/components/settings/GeneralTab.tsx`
@@ -1540,87 +1491,93 @@ EOF
 
 ---
 
-### Task 8: 自訂 CSS 分頁
+### Task 8: 自訂 CSS 分頁（四選一：`editorial`/`developer` 唯讀、`user1`/`user2` 可編輯）
 
 **Files:**
 - Create: `src/frontend/components/settings/CustomCssTab.tsx`
 - Modify: `src/frontend/components/SettingsModal.tsx`（`category === 'customCss'`）
-- Modify: `src/frontend/App.tsx`（把目前套用中的 CSS 內容注入一個全域 `<style>` 標籤）
+- Modify: `src/frontend/App.tsx`（把目前生效的 CSS 內容注入一個全域 `<style>` 標籤）
 - Test: `tests/frontend/CustomCssTab.test.tsx`
 
 **Interfaces:**
-- `<CustomCssTab value={string} onChange={(css: string) => void} onResetToDefault={() => void} />` — a `<textarea>` for live editing (content owned by the parent, persisted to `localStorage['mvs-custom-css']` by the parent, not this component), a preset `<select>` populated from `GET /api/css-presets`, an "Apply" button that sets `value` to the selected preset's `css`, and a "Save as new preset" flow (name prompt via a controlled text input, not `window.prompt` — browser dialogs are disallowed per this project's tooling constraints) that calls `POST /api/css-presets`
+- `<CustomCssTab settings={Settings | null} updateSettings={(patch: Partial<Settings>) => void} />`——四個選項用 radio/button 呈現（`editorial`/`developer`/`user1`/`user2`），選到哪個就把對應內容顯示在下方的 `<textarea>`：`editorial`/`developer` 該 textarea 是 `readOnly`（`disabled` 也可以，但 `readOnly` 讓文字仍可選取複製，體驗更好）；`user1`/`user2` 該 textarea 可編輯，编辑內容是**本地草稿**（元件內部 state，不即時送出），按下「套用」按鈕才呼叫 `updateSettings({customCssChoice: 'user1', customCssUser1: draft})`（同時寫回該 slot 內容並切換生效選項，一次 PUT 完成，不是兩個獨立動作）
+- 切換選項時（點選另一個 radio/button）：若原本正在編輯 user slot 且草稿跟已儲存內容不同，**不強制丟棄**——只是単純把顯示切到新選項的內容，原本未套用的草稿留在畫面外就自然遺失（不做跨選項的草稿暫存，YAGNI；使用者若中途切換分心，本來就預期未套用的編輯會遺失，這跟一般表單「沒存就跳頁會遺失」的直覺一致）
 
 - [ ] **Step 1: 寫失敗測試**
 
 `tests/frontend/CustomCssTab.test.tsx`:
 
 ```tsx
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { CustomCssTab } from '../../src/frontend/components/settings/CustomCssTab.js'
+import { EDITORIAL_CSS, DEVELOPER_CSS } from '../../src/frontend/custom-css-presets.js'
+
+function baseSettings(overrides = {}) {
+  return {
+    plantumlServerUrl: 'https://www.plantuml.com/plantuml',
+    sendToPlantUmlServer: false,
+    privacyMode: false,
+    blockRemoteContent: false,
+    allowHtmlScripts: false,
+    bakOnSave: false,
+    customCssChoice: 'user1',
+    customCssUser1: '',
+    customCssUser2: '',
+    effective: { blockRemoteContent: false, sendToPlantUmlServer: false, allowHtmlScripts: false },
+    ...overrides,
+  }
+}
 
 describe('CustomCssTab', () => {
-  beforeEach(() => sessionStorage.setItem('mvs-token', 'tok'))
-  afterEach(() => {
-    vi.unstubAllGlobals()
-    sessionStorage.clear()
+  it('shows the editorial preset content in a readonly textarea when selected', () => {
+    render(<CustomCssTab settings={baseSettings({ customCssChoice: 'editorial' })} updateSettings={() => {}} />)
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement
+    expect(textarea).toHaveValue(EDITORIAL_CSS)
+    expect(textarea).toHaveAttribute('readonly')
   })
 
-  it('renders the current CSS value in the editor', () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify([]))))
-    render(<CustomCssTab value=".markdown-body { color: red; }" onChange={() => {}} onResetToDefault={() => {}} />)
-    expect(screen.getByRole('textbox')).toHaveValue('.markdown-body { color: red; }')
+  it('shows the developer preset content in a readonly textarea when selected', () => {
+    render(<CustomCssTab settings={baseSettings({ customCssChoice: 'developer' })} updateSettings={() => {}} />)
+    expect(screen.getByRole('textbox')).toHaveValue(DEVELOPER_CSS)
   })
 
-  it('calls onChange as the user edits', () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify([]))))
-    const onChange = vi.fn()
-    render(<CustomCssTab value="" onChange={onChange} onResetToDefault={() => {}} />)
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: '.markdown-body {}' } })
-    expect(onChange).toHaveBeenCalledWith('.markdown-body {}')
-  })
-
-  it('loads presets from GET /api/css-presets and applying one calls onChange with its css', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify([{ id: '1', name: 'editorial', css: '.markdown-body { color: blue; }' }]))
-      )
+  it('shows user1 slot content in an editable textarea when selected', () => {
+    render(
+      <CustomCssTab
+        settings={baseSettings({ customCssChoice: 'user1', customCssUser1: '.markdown-body { color: red; }' })}
+        updateSettings={() => {}}
+      />
     )
-    const onChange = vi.fn()
-    render(<CustomCssTab value="" onChange={onChange} onResetToDefault={() => {}} />)
-    await waitFor(() => screen.getByText('editorial'))
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: '1' } })
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement
+    expect(textarea).toHaveValue('.markdown-body { color: red; }')
+    expect(textarea).not.toHaveAttribute('readonly')
+  })
+
+  it('switching to a built-in choice calls updateSettings with just the choice', () => {
+    const updateSettings = vi.fn()
+    render(<CustomCssTab settings={baseSettings()} updateSettings={updateSettings} />)
+    fireEvent.click(screen.getByRole('button', { name: /editorial/i }))
+    expect(updateSettings).toHaveBeenCalledWith({ customCssChoice: 'editorial' })
+  })
+
+  it('editing the user1 draft then clicking Apply persists the slot and switches the active choice in one call', () => {
+    const updateSettings = vi.fn()
+    render(
+      <CustomCssTab settings={baseSettings({ customCssChoice: 'user2' })} updateSettings={updateSettings} />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /user 1/i }))
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '.markdown-body { color: blue; }' } })
     fireEvent.click(screen.getByRole('button', { name: /apply/i }))
-    expect(onChange).toHaveBeenCalledWith('.markdown-body { color: blue; }')
+    expect(updateSettings).toHaveBeenCalledWith({
+      customCssChoice: 'user1',
+      customCssUser1: '.markdown-body { color: blue; }',
+    })
   })
 
-  it('calls onResetToDefault when the reset button is clicked', () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify([]))))
-    const onResetToDefault = vi.fn()
-    render(<CustomCssTab value="x" onChange={() => {}} onResetToDefault={onResetToDefault} />)
-    fireEvent.click(screen.getByRole('button', { name: /reset/i }))
-    expect(onResetToDefault).toHaveBeenCalledOnce()
-  })
-
-  it('saving as a new preset POSTs the current value with the entered name', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify([])))
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify([{ id: '2', name: 'my-preset', css: '.markdown-body {}' }]), { status: 201 })
-      )
-    vi.stubGlobal('fetch', fetchMock)
-    render(<CustomCssTab value=".markdown-body {}" onChange={() => {}} onResetToDefault={() => {}} />)
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
-
-    fireEvent.change(screen.getByLabelText(/preset name/i), { target: { value: 'my-preset' } })
-    fireEvent.click(screen.getByRole('button', { name: /save as new preset/i }))
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
-    const postCall = fetchMock.mock.calls[1]
-    expect(JSON.parse(postCall[1].body)).toEqual({ name: 'my-preset', css: '.markdown-body {}' })
+  it('the Apply button is not shown for built-in (readonly) choices', () => {
+    render(<CustomCssTab settings={baseSettings({ customCssChoice: 'editorial' })} updateSettings={() => {}} />)
+    expect(screen.queryByRole('button', { name: /apply/i })).not.toBeInTheDocument()
   })
 })
 ```
@@ -1635,130 +1592,151 @@ Expected: FAIL — module not found
 ```json
 {
   "settings": {
-    "cssEditorLabel": "Custom CSS (article rendering area only)",
-    "cssPresetLabel": "Preset",
+    "cssChoiceEditorial": "Editorial (readonly)",
+    "cssChoiceDeveloper": "Developer (readonly)",
+    "cssChoiceUser1": "User 1",
+    "cssChoiceUser2": "User 2",
     "cssApply": "Apply",
-    "cssReset": "Reset to default",
-    "cssPresetNameLabel": "Preset name",
-    "cssSaveAsNew": "Save as new preset"
+    "cssReadonlyHint": "Built-in presets are readonly. Select User 1 or User 2 to write your own CSS."
   }
 }
 ```
 
-- [ ] **Step 4: 實作**
+- [ ] **Step 4: 建立前端共用的內建範本常數**
+
+前端也需要 `EDITORIAL_CSS`/`DEVELOPER_CSS` 這兩個常數本身（純渲染測試/顯示用；實際生效內容一律以後端 `GET /api/settings` 回傳的為準，前端常數只是為了在還沒拿到 settings 前有東西可以先渲染，或給測試 import 用）。建立 `src/frontend/custom-css-presets.ts`，內容跟 `src/server/custom-css-presets.js` 的 `EDITORIAL_CSS`/`DEVELOPER_CSS` 完全一致（純字串常數，重複兩份可接受——這是前後端各自獨立的 bundle，沒有共用模組機制，維持一致性用測試鎖住即可，不需要為了不重複而引入 monorepo 共用套件的複雜度）。
+
+- [ ] **Step 5: 實作 `CustomCssTab`**
 
 `src/frontend/components/settings/CustomCssTab.tsx`:
 
 ```tsx
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { apiFetch } from '../../api-client.js'
-
-interface Preset {
-  id: string
-  name: string
-  css: string
-}
+import type { Settings, CustomCssChoice } from '../../hooks/useSettings.js'
+import { EDITORIAL_CSS, DEVELOPER_CSS } from '../../custom-css-presets.js'
 
 interface CustomCssTabProps {
-  value: string
-  onChange: (css: string) => void
-  onResetToDefault: () => void
+  settings: Settings | null
+  updateSettings: (patch: Partial<Settings>) => void
 }
 
-export function CustomCssTab({ value, onChange, onResetToDefault }: CustomCssTabProps) {
+const CHOICES: CustomCssChoice[] = ['editorial', 'developer', 'user1', 'user2']
+
+function resolveDisplay(settings: Settings, choice: CustomCssChoice): { content: string; readonly: boolean } {
+  if (choice === 'editorial') return { content: EDITORIAL_CSS, readonly: true }
+  if (choice === 'developer') return { content: DEVELOPER_CSS, readonly: true }
+  if (choice === 'user2') return { content: settings.customCssUser2, readonly: false }
+  return { content: settings.customCssUser1, readonly: false }
+}
+
+export function CustomCssTab({ settings, updateSettings }: CustomCssTabProps) {
   const { t } = useTranslation()
-  const [presets, setPresets] = useState<Preset[]>([])
-  const [selectedPresetId, setSelectedPresetId] = useState('')
-  const [newPresetName, setNewPresetName] = useState('')
+  // Draft is local-only until Apply — see the task's "no cross-choice draft
+  // stash" note: switching choices before applying silently discards it.
+  const [draft, setDraft] = useState<string | null>(null)
 
-  useEffect(() => {
-    apiFetch('/api/css-presets')
-      .then((res) => res.json())
-      .then(setPresets)
-  }, [])
+  if (!settings) return null
 
-  function applySelectedPreset() {
-    const preset = presets.find((p) => p.id === selectedPresetId)
-    if (preset) onChange(preset.css)
+  const activeChoice = settings.customCssChoice
+  const { content, readonly } = resolveDisplay(settings, activeChoice)
+  const displayedValue = draft ?? content
+
+  function selectChoice(choice: CustomCssChoice) {
+    setDraft(null)
+    if (choice === 'editorial' || choice === 'developer') {
+      updateSettings({ customCssChoice: choice })
+    } else {
+      // Switching to a user slot doesn't persist anything by itself — only
+      // Apply does. This lets the user look at a slot without committing.
+      updateSettings({ customCssChoice: choice })
+    }
   }
 
-  async function saveAsNewPreset() {
-    const res = await apiFetch('/api/css-presets', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newPresetName, css: value }),
-    })
-    const updated = await res.json()
-    setPresets(updated)
-    setNewPresetName('')
+  function applyDraft() {
+    if (draft === null) return
+    const key = activeChoice === 'user2' ? 'customCssUser2' : 'customCssUser1'
+    updateSettings({ customCssChoice: activeChoice, [key]: draft })
+    setDraft(null)
   }
 
   return (
     <div>
-      <label>
-        {t('settings.cssEditorLabel')}
-        <textarea value={value} onChange={(e) => onChange(e.target.value)} rows={12} />
-      </label>
-
-      <button onClick={onResetToDefault}>{t('settings.cssReset')}</button>
-
-      <label>
-        {t('settings.cssPresetLabel')}
-        <select value={selectedPresetId} onChange={(e) => setSelectedPresetId(e.target.value)}>
-          <option value="" disabled>
-            —
-          </option>
-          {presets.map((preset) => (
-            <option key={preset.id} value={preset.id}>
-              {preset.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <button onClick={applySelectedPreset}>{t('settings.cssApply')}</button>
-
-      <label>
-        {t('settings.cssPresetNameLabel')}
-        <input type="text" value={newPresetName} onChange={(e) => setNewPresetName(e.target.value)} />
-      </label>
-      <button onClick={saveAsNewPreset}>{t('settings.cssSaveAsNew')}</button>
+      <div>
+        {CHOICES.map((choice) => (
+          <button key={choice} aria-pressed={activeChoice === choice} onClick={() => selectChoice(choice)}>
+            {t(`settings.cssChoice${choice[0].toUpperCase()}${choice.slice(1)}`)}
+          </button>
+        ))}
+      </div>
+      {readonly && <p>{t('settings.cssReadonlyHint')}</p>}
+      <textarea
+        value={displayedValue}
+        readOnly={readonly}
+        onChange={(e) => !readonly && setDraft(e.target.value)}
+        rows={12}
+      />
+      {!readonly && <button onClick={applyDraft}>{t('settings.cssApply')}</button>}
     </div>
   )
 }
 ```
 
-在 `App.tsx`：加入 `customCss` state（初始從 `localStorage.getItem('mvs-custom-css') ?? ''`），`onChange` 時同時更新 state 與寫回 `localStorage`；渲染一個 `<style>{customCss}</style>` 掛在頂層（selector 已由範本/使用者自行限制在 `.markdown-body`，App 層不做二次過濾——若使用者刻意寫出影響其他區域的 selector 屬於使用者自行承擔，不是資安邊界，因為 CSS 不能拿來執行任意程式碼或存取 token）。`onResetToDefault` 清空 `customCss` 並移除該 `localStorage` 鍵。
+（實作者請注意：`selectChoice` 切到 `user1`/`user2` 時**立刻**呼叫 `updateSettings({customCssChoice: choice})`——也就是說「選取某個 user slot」本身就會讓它成為目前生效的 CSS（即使還沒編輯過），這跟 md-reader 的行為一致：四個選項是真正的「目前用哪一個」單選，不是「先選來看看，套用了才生效」。這點會反映在 Step 1 的測試裡（`switching to a built-in choice calls updateSettings with just the choice`），實作者請確保 `user1`/`user2` 的切換也遵循一樣的即時生效邏輯，只有「編輯後的草稿內容」才需要額外按 Apply 才會持久化。)
 
-- [ ] **Step 5: 執行測試確認通過**
+在 `SettingsModal.tsx` 接上 `useSettings` 並在 `category === 'customCss'` 時渲染 `<CustomCssTab settings={settings} updateSettings={updateSettings} />`。
+
+在 `App.tsx`：不再需要 `localStorage`-based `customCss` state——直接從 `settings`（`useSettings` 的回傳值）算出目前生效的 CSS 內容並注入 `<style>`：
+
+```tsx
+const effectiveCustomCss = settings
+  ? settings.customCssChoice === 'editorial'
+    ? EDITORIAL_CSS
+    : settings.customCssChoice === 'developer'
+      ? DEVELOPER_CSS
+      : settings.customCssChoice === 'user2'
+        ? settings.customCssUser2
+        : settings.customCssUser1
+  : ''
+
+// in the render:
+<style>{effectiveCustomCss}</style>
+```
+
+（selector 已由範本/使用者自行限制在 `.markdown-body`，App 層不做二次過濾——若使用者刻意寫出影響其他區域的 selector 屬於使用者自行承擔，不是資安邊界，因為 CSS 不能拿來執行任意程式碼或存取 token。實作者若覺得在 `App.tsx` 重複這段 choice-resolve 邏輯不夠 DRY，可以抽成一個小的共用函式放進 `src/frontend/custom-css-presets.ts`，跟 `EDITORIAL_CSS`/`DEVELOPER_CSS` 放一起。）
+
+- [ ] **Step 6: 執行測試確認通過**
 
 Run: `npm run test:frontend`
 Expected: 全部通過
 
-- [ ] **Step 6: Codex code review**
+- [ ] **Step 7: Codex code review**
 
 Run: `/codex:review --base <prev-commit-sha>`
 
-- [ ] **Step 7: Commit — UI 段落**
+- [ ] **Step 8: Commit — UI 段落**
 
 ```bash
-git add src/frontend/components/settings/CustomCssTab.tsx src/frontend/components/SettingsModal.tsx src/frontend/App.tsx src/frontend/i18n/locales/*.json tests/frontend/CustomCssTab.test.tsx
+git add src/frontend/components/settings/CustomCssTab.tsx src/frontend/components/SettingsModal.tsx src/frontend/App.tsx src/frontend/custom-css-presets.ts src/frontend/i18n/locales/*.json tests/frontend/CustomCssTab.test.tsx
 git commit -m "$(cat <<'EOF'
-Add Custom CSS settings tab with preset apply/save
+Add four-way Custom CSS tab (readonly presets, editable user slots)
 
-Why: The design spec's Custom CSS tab needs a live editor scoped to
-the article-rendering container, backed by the growable preset
-library Task 2 built server-side.
-What: CustomCssTab is a controlled textarea (content owned by
-App.tsx, persisted to localStorage so it's not lost on reload) plus a
-preset dropdown fetched from GET /api/css-presets, an Apply button
-that loads a preset's css into the editor, and a name input + Save
-button that POSTs the current editor content as a new preset.
-App.tsx injects the current CSS into a top-level <style> tag.
+Why: Ported from md-reader's shipped design per the user's mid-plan
+request — simpler than this plan's original growable-preset-library
+UI (never implemented), with built-in choices that are explicitly
+viewable but not editable.
+What: CustomCssTab shows four choices (editorial/developer/user1/
+user2); selecting a built-in immediately makes it the effective CSS
+and shows its content in a readonly textarea; selecting a user slot
+also immediately makes it effective (showing its currently-saved
+content), and editing it holds a local draft until Apply persists it
+to that slot in the same PUT that keeps it the active choice.
+App.tsx computes the effective CSS straight from settings
+(customCssChoice/customCssUser1/customCssUser2) instead of a
+localStorage-based draft, since these are now backend-persisted.
 How: [UI CHECKPOINT] UI-facing segment per CLAUDE.md's checkpoint
-rule — this is the last new settings-tab content; Task 9 wires the
-remaining cross-cutting integration (allowHtmlScripts into TabContent)
-and does the whole-plan closing review.
+rule — last new settings-tab content; Task 9 wires the remaining
+cross-cutting integration and does the whole-plan closing review.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01KCkr3UUhi36YHAEiAAhp5L
@@ -1886,7 +1864,7 @@ EOF
 - [ ] `npm run lint`, `npm run typecheck:frontend`, `npm run test:frontend`, `npm run test:unit`, `npm run test:integration`, `npm run build` all pass
 - [ ] Privacy mode, once enabled, forces `blockRemoteContent`/`sendToPlantUmlServer`/`allowHtmlScripts` to safe values both in the settings UI (disabled controls) and enforced server-side (`effective.*`), verified by calling `POST /api/plantuml-proxy` directly while privacy mode is on
 - [ ] Turning privacy mode back off restores the user's previously saved individual preferences (not defaults)
-- [ ] CSS presets seed on first read, persist new presets across restarts, and applying/saving a preset round-trips through the Custom CSS tab
+- [ ] CSS four-way choice persists across restarts (`customCssChoice`/`customCssUser1`/`customCssUser2` in config.json); switching to `editorial`/`developer` shows the built-in CSS in a readonly textarea and cannot be edited or overwritten; switching to `user1`/`user2` shows that slot's saved content editable, and only an explicit Apply persists a draft edit
 - [ ] Theme selection visibly changes `document.documentElement`'s `data-theme` attribute
 - [ ] Opening an `.html` file after enabling "allow HTML scripts" in settings renders its iframe with `sandbox="allow-scripts"` (still without `allow-same-origin`, per Plan 6's HtmlView contract)
 - [ ] All six `/goal` sub-plans (檔案 API, 搜尋, 認證細節, 前端骨架, 主內容區, 設定選單) are now implemented and merged to `main`
