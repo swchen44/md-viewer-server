@@ -311,9 +311,9 @@ tab — needs GFM extensions (tables, task lists) since the design
 spec calls for CommonMark+GFM parity, and mermaid code fences need to
 render as diagrams, not literal code blocks.
 What: MarkdownView wraps react-markdown + remark-gfm, overriding the
-default `code` renderer to detect a `language-mermaid` class (from
-```mermaid fences) and delegate to a dedicated MermaidBlock component
-instead of rendering plain code. A placeholder MermaidBlock stub is
+default `code` renderer to detect a `language-mermaid` class (from a
+mermaid-tagged code fence) and delegate to a dedicated MermaidBlock
+component instead of rendering plain code. A placeholder MermaidBlock stub is
 included so this task's tests compile independently of Task 3, which
 replaces the stub with real rendering behind the same {definition}
 prop contract.
