@@ -10,7 +10,9 @@
     "targetContent": "内容",
     "targetBoth": "両方",
     "scopeAll": "すべてのファイル",
-    "scopeOpen": "開いているタブ"
+    "scopeOpen": "開いているタブ",
+    "clearHistory": "履歴を消去",
+    "historyMaxSizeLabel": "履歴の保存件数"
   },
   "outline": {
     "noFileOpen": "ファイルが開かれていません",

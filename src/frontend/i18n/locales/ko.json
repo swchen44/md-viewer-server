@@ -10,7 +10,9 @@
     "targetContent": "내용",
     "targetBoth": "둘 다",
     "scopeAll": "모든 파일",
-    "scopeOpen": "열린 탭"
+    "scopeOpen": "열린 탭",
+    "clearHistory": "기록 지우기",
+    "historyMaxSizeLabel": "기록 최대 개수"
   },
   "outline": {
     "noFileOpen": "열린 파일 없음",

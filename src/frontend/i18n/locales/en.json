@@ -10,7 +10,9 @@
     "targetContent": "Content",
     "targetBoth": "Both",
     "scopeAll": "All files",
-    "scopeOpen": "Open tabs"
+    "scopeOpen": "Open tabs",
+    "clearHistory": "Clear history",
+    "historyMaxSizeLabel": "History size"
   },
   "outline": {
     "noFileOpen": "No file open",
