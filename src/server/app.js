@@ -1,4 +1,6 @@
 import express from 'express'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { createAuthMiddleware } from './auth-middleware.js'
 import { createRootsRouter } from './api/roots.js'
 import { createFilesRouter } from './api/files.js'
@@ -8,6 +10,22 @@ import { createAssetRouter } from './api/asset.js'
 import { createSearchRouter } from './api/search.js'
 import { createSettingsRouter } from './api/settings.js'
 import { createPlantUmlRouter } from './api/plantuml.js'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+// esbuild's `define` (see scripts/build.js) substitutes this identifier
+// throughout the whole bundle, including this module, whenever entry.js is
+// built as dist/bundle.js. It doubles as the "am I running bundled?" check:
+// bundled, this file's code executes as part of dist/bundle.js, so
+// import.meta.url (and therefore __dirname above) resolves to dist/, and
+// dist/frontend/ is a sibling of it. Running from source, __dirname is
+// src/server/, two levels below the project root, where dist/frontend/
+// actually lives. See src/server/entry.js's readPackageVersion() for the
+// same pattern applied to the version string.
+const FRONTEND_DIST =
+  typeof __MVS_BUNDLED_VERSION__ !== 'undefined'
+    ? path.join(__dirname, 'frontend')
+    : path.join(__dirname, '..', '..', 'dist', 'frontend')
 
 export function createApp({
   config,
@@ -51,6 +69,17 @@ export function createApp({
     logger.info({ auth: 'ok' }, 'shutdown requested')
     res.json({ status: 'shutting-down' })
     onShutdown()
+  })
+
+  // Registered after every /api route above, so Express (which matches
+  // routes in registration order) never lets this shadow an API request.
+  // No authMiddleware here on purpose: the browser needs to load the JS
+  // bundle before it can read the token out of the URL and store it in
+  // sessionStorage (see src/frontend/auth.ts's initAuthFromUrl()), so the
+  // static shell itself must be servable without the token.
+  app.use(express.static(FRONTEND_DIST))
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(FRONTEND_DIST, 'index.html'))
   })
 
   return app

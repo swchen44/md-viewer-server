@@ -1,4 +1,5 @@
 import { build } from 'esbuild'
+import { execSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -7,6 +8,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const root = path.join(__dirname, '..')
 
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
+
+console.log('Building frontend...')
+execSync('vite build', { cwd: root, stdio: 'inherit' })
 
 await build({
   entryPoints: [path.join(root, 'src', 'server', 'entry.js')],
@@ -40,4 +44,4 @@ await build({
   outfile: path.join(root, 'dist', 'regex-worker.js'),
 })
 
-console.log('Built dist/bundle.js and dist/regex-worker.js')
+console.log('Built dist/frontend/, dist/bundle.js, and dist/regex-worker.js')
