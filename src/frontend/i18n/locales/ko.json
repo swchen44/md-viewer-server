@@ -10,5 +10,8 @@
     "targetBoth": "둘 다",
     "scopeAll": "모든 파일",
     "scopeOpen": "열린 탭"
+  },
+  "outline": {
+    "noFileOpen": "열린 파일 없음"
   }
 }

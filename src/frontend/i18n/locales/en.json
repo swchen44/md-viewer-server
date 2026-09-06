@@ -10,5 +10,8 @@
     "targetBoth": "Both",
     "scopeAll": "All files",
     "scopeOpen": "Open tabs"
+  },
+  "outline": {
+    "noFileOpen": "No file open"
   }
 }

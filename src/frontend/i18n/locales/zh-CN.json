@@ -10,5 +10,8 @@
     "targetBoth": "两者",
     "scopeAll": "全部文件",
     "scopeOpen": "已打开标签"
+  },
+  "outline": {
+    "noFileOpen": "尚未打开文件"
   }
 }

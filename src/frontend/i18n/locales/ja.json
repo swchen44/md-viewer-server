@@ -10,5 +10,8 @@
     "targetBoth": "両方",
     "scopeAll": "すべてのファイル",
     "scopeOpen": "開いているタブ"
+  },
+  "outline": {
+    "noFileOpen": "ファイルが開かれていません"
   }
 }

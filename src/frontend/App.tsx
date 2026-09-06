@@ -4,6 +4,7 @@ import { TopBar } from './components/TopBar.js'
 import { TabBar, type Tab } from './components/TabBar.js'
 import { Sidebar, type SidebarMode } from './components/Sidebar.js'
 import { FileTreePanel } from './components/FileTreePanel.js'
+import { OutlinePanel } from './components/OutlinePanel.js'
 
 export function App() {
   const [tabs, setTabs] = useState<Tab[]>([])
@@ -20,6 +21,14 @@ export function App() {
   function closeTab(id: string) {
     setTabs((prev) => prev.filter((t) => t.id !== id))
     setActiveTabId((prev) => (prev === id ? null : prev))
+  }
+
+  const activeTab = tabs.find((t) => t.id === activeTabId) ?? null
+
+  function handleJumpToHeading(line: number) {
+    // Scrolling to the heading's line is the main-content-view plan's job —
+    // no rendered document content exists yet to scroll within.
+    console.log('jump to heading', line)
   }
 
   function openFile(rootId: number, relPath: string) {
@@ -40,6 +49,12 @@ export function App() {
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         <Sidebar mode={sidebarMode} onModeChange={setSidebarMode}>
           {sidebarMode === 'files' && <FileTreePanel roots={roots} onOpenFile={openFile} />}
+          {sidebarMode === 'outline' && (
+            <OutlinePanel
+              activeTab={activeTab ? { rootId: activeTab.rootId, relPath: activeTab.relPath } : null}
+              onJumpToHeading={handleJumpToHeading}
+            />
+          )}
         </Sidebar>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           <TabBar tabs={tabs} activeTabId={activeTabId} onSelect={setActiveTabId} onClose={closeTab} />
