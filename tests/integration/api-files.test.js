@@ -84,4 +84,39 @@ describe('file API end-to-end', () => {
     })
     expect(res.status).toBe(400)
   })
+
+  // These two endpoints are mounted behind the same auth middleware in app.js,
+  // but that was previously only true by inspection: their own test file builds
+  // a bare Express app with no auth at all. Assert it against the real daemon.
+  it('rejects GET /api/settings without a valid token', async () => {
+    expect((await fetch(apiUrl('/api/settings'))).status).toBe(401)
+    const wrongToken = await fetch(apiUrl('/api/settings'), {
+      headers: { 'X-Auth-Token': '0000' === token ? '1111' : '0000' },
+    })
+    expect(wrongToken.status).toBe(401)
+  })
+
+  it('rejects PUT /api/settings without a valid token', async () => {
+    const res = await fetch(apiUrl('/api/settings'), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plantumlServerUrl: 'http://127.0.0.1:1' }),
+    })
+    expect(res.status).toBe(401)
+  })
+
+  it('rejects POST /api/plantuml-proxy without a valid token', async () => {
+    const res = await fetch(apiUrl('/api/plantuml-proxy'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: '@startuml\nA -> B\n@enduml' }),
+    })
+    expect(res.status).toBe(401)
+  })
+
+  it('allows GET /api/settings with a valid token', async () => {
+    const res = await fetch(apiUrl('/api/settings'), { headers: { 'X-Auth-Token': token } })
+    expect(res.status).toBe(200)
+    expect((await res.json()).plantumlServerUrl).toBe('https://www.plantuml.com/plantuml')
+  })
 })
