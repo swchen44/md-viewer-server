@@ -1,0 +1,14 @@
+{
+  "sidebar": {
+    "filesTab": "檔案",
+    "outlineTab": "大綱"
+  },
+  "search": {
+    "placeholder": "搜尋...",
+    "targetName": "檔名",
+    "targetContent": "內容",
+    "targetBoth": "兩者",
+    "scopeAll": "全部檔案",
+    "scopeOpen": "已開啟分頁"
+  }
+}

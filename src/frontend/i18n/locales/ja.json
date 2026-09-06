@@ -1,0 +1,14 @@
+{
+  "sidebar": {
+    "filesTab": "ファイル",
+    "outlineTab": "アウトライン"
+  },
+  "search": {
+    "placeholder": "検索...",
+    "targetName": "ファイル名",
+    "targetContent": "内容",
+    "targetBoth": "両方",
+    "scopeAll": "すべてのファイル",
+    "scopeOpen": "開いているタブ"
+  }
+}

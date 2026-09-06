@@ -22,9 +22,12 @@
   "dependencies": {
     "chokidar": "^5.0.0",
     "express": "^4.21.0",
+    "i18next": "^26.4.2",
+    "i18next-browser-languagedetector": "^8.2.1",
     "pino": "^9.4.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "react-i18next": "^17.0.13",
     "ws": "^8.21.3"
   },
   "devDependencies": {

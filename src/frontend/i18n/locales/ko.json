@@ -1,0 +1,14 @@
+{
+  "sidebar": {
+    "filesTab": "파일",
+    "outlineTab": "개요"
+  },
+  "search": {
+    "placeholder": "검색...",
+    "targetName": "파일명",
+    "targetContent": "내용",
+    "targetBoth": "둘 다",
+    "scopeAll": "모든 파일",
+    "scopeOpen": "열린 탭"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "sidebar": {
+    "filesTab": "文件",
+    "outlineTab": "大纲"
+  },
+  "search": {
+    "placeholder": "搜索...",
+    "targetName": "文件名",
+    "targetContent": "内容",
+    "targetBoth": "两者",
+    "scopeAll": "全部文件",
+    "scopeOpen": "已打开标签"
+  }
+}

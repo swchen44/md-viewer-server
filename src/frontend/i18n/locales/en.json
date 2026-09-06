@@ -1,0 +1,14 @@
+{
+  "sidebar": {
+    "filesTab": "Files",
+    "outlineTab": "Outline"
+  },
+  "search": {
+    "placeholder": "Search...",
+    "targetName": "Name",
+    "targetContent": "Content",
+    "targetBoth": "Both",
+    "scopeAll": "All files",
+    "scopeOpen": "Open tabs"
+  }
+}
