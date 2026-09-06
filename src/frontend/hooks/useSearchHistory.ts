@@ -26,11 +26,31 @@ function loadHistory(mode: string): StoredHistory {
 }
 
 function persist(mode: string, history: StoredHistory) {
-  localStorage.setItem(storageKey(mode), JSON.stringify(history))
+  try {
+    localStorage.setItem(storageKey(mode), JSON.stringify(history))
+  } catch {
+    // localStorage can throw (private browsing, quota exceeded, storage disabled
+    // by browser settings). Persistence is best-effort: the in-memory React state
+    // update must still succeed, degrading to "history doesn't survive a reload"
+    // rather than breaking the search UI.
+  }
 }
 
 export function useSearchHistory(mode: string) {
   const [history, setHistory] = useState<StoredHistory>(() => loadHistory(mode))
+
+  // `SearchBar` is rerendered in place (not remounted) when the sidebar swaps
+  // between 'files' and 'outline' (same pattern as the `target`-reset handling
+  // in SearchBar.tsx and `prevActiveTab` in OutlinePanel.tsx), so the `useState`
+  // initializer above only runs once, at first mount, and never re-derives for
+  // a new `mode`. Adjust state during render (rather than in a `useEffect`,
+  // which this repo's react-hooks/set-state-in-effect lint rule flags) so the
+  // old mode's in-memory entries are gone before this render commits.
+  const [prevMode, setPrevMode] = useState(mode)
+  if (prevMode !== mode) {
+    setPrevMode(mode)
+    setHistory(loadHistory(mode))
+  }
 
   const addEntry = useCallback(
     (query: string) => {
