@@ -18,6 +18,28 @@ export class InvalidSettingsError extends Error {
   }
 }
 
+function assertValidPlantUmlServerUrl(value) {
+  if (typeof value !== 'string') {
+    throw new InvalidSettingsError('plantumlServerUrl must be a string', {
+      invalidKeys: ['plantumlServerUrl'],
+    })
+  }
+  let parsed
+  try {
+    parsed = new URL(value)
+  } catch {
+    throw new InvalidSettingsError(`plantumlServerUrl is not a valid URL: ${value}`, {
+      invalidKeys: ['plantumlServerUrl'],
+    })
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new InvalidSettingsError(
+      `plantumlServerUrl must use http: or https: (got ${parsed.protocol})`,
+      { invalidKeys: ['plantumlServerUrl'] }
+    )
+  }
+}
+
 export function readSettings(configDir) {
   const config = readConfig(configDir) ?? {}
   return {
@@ -34,6 +56,13 @@ export function updateSettings(configDir, updates) {
     throw new InvalidSettingsError(`Invalid settings keys: ${invalidKeys.join(', ')}`, {
       invalidKeys,
     })
+  }
+
+  if ('plantumlServerUrl' in updates) {
+    // The proxy fetches this URL and hands the body back to the browser, so an
+    // unvalidated value is an SSRF read primitive against anything the daemon
+    // host can reach.
+    assertValidPlantUmlServerUrl(updates.plantumlServerUrl)
   }
 
   const config = readConfig(configDir) ?? {}

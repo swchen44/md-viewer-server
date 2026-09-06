@@ -132,4 +132,14 @@ describe('settings and PlantUML proxy API', () => {
     expect(after.port).toBe(before.port)
     expect(after.roots).toEqual(before.roots)
   })
+
+  it('PUT /api/settings rejects a plantumlServerUrl that is not an http(s) URL', async () => {
+    const app = buildApp()
+    const res = await request(app).put('/api/settings').send({ plantumlServerUrl: 'file:///etc/passwd' })
+    expect(res.status).toBe(400)
+    expect(res.body.errorCode).toBe('INVALID_SETTINGS')
+
+    const getRes = await request(app).get('/api/settings')
+    expect(getRes.body.plantumlServerUrl).toBe('https://www.plantuml.com/plantuml')
+  })
 })

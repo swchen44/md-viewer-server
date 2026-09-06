@@ -89,4 +89,40 @@ describe('settings', () => {
       expect(after.plantumlServerUrl).toBeUndefined()
     })
   })
+
+  describe('plantumlServerUrl validation', () => {
+    it('rejects a string that is not a URL at all', () => {
+      expect(() => updateSettings(configDir, { plantumlServerUrl: 'not a url' })).toThrow(
+        InvalidSettingsError
+      )
+      expect(readSettings(configDir).plantumlServerUrl).toBe('https://www.plantuml.com/plantuml')
+    })
+
+    it('rejects a file: URL', () => {
+      expect(() => updateSettings(configDir, { plantumlServerUrl: 'file:///etc/passwd' })).toThrow(
+        InvalidSettingsError
+      )
+    })
+
+    it('rejects a javascript: URL', () => {
+      expect(() =>
+        updateSettings(configDir, { plantumlServerUrl: 'javascript:alert(1)' })
+      ).toThrow(InvalidSettingsError)
+    })
+
+    it('rejects a non-string value', () => {
+      expect(() => updateSettings(configDir, { plantumlServerUrl: 42 })).toThrow(
+        InvalidSettingsError
+      )
+    })
+
+    it('accepts http: and https: URLs', () => {
+      expect(() =>
+        updateSettings(configDir, { plantumlServerUrl: 'http://plantuml.internal:8080' })
+      ).not.toThrow()
+      expect(() =>
+        updateSettings(configDir, { plantumlServerUrl: 'https://plantuml.example.com' })
+      ).not.toThrow()
+    })
+  })
 })
