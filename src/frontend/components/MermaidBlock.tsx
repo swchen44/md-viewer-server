@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import mermaid from 'mermaid'
 
-mermaid.initialize({ startOnLoad: false })
+mermaid.initialize({ startOnLoad: false, suppressErrorRendering: true })
 
 let renderCounter = 0
 
@@ -22,6 +22,7 @@ export function MermaidBlock({ definition }: MermaidBlockProps) {
   if (prevDefinition !== definition) {
     setPrevDefinition(definition)
     setError(null)
+    setSvg(null)
   }
 
   useEffect(() => {
@@ -32,7 +33,10 @@ export function MermaidBlock({ definition }: MermaidBlockProps) {
         if (!cancelled) setSvg(result.svg)
       })
       .catch(() => {
-        if (!cancelled) setError('Diagram error: could not render this diagram.')
+        if (!cancelled) {
+          setError('Diagram error: could not render this diagram.')
+          setSvg(null)
+        }
       })
     return () => {
       cancelled = true
