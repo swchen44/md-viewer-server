@@ -580,6 +580,69 @@ describe('App main content, save, draft, and conflict wiring', () => {
     expect(secondBody).toEqual({ content: '# Hi edited', mtimeMs: 1, force: true })
   })
 
+  it('keeps the tab dirty and preserves the newer draft when the user edits again while a Keep Mine force-save PUT is still in flight', async () => {
+    let putCount = 0
+    let resolveForcePut: (res: Response) => void
+    const forcePutPromise = new Promise<Response>((resolve) => {
+      resolveForcePut = resolve
+    })
+    const fetchMock = vi.fn().mockImplementation((url: string, options?: RequestInit) => {
+      if (url.includes('/api/roots')) return Promise.resolve(jsonResponse([{ id: 0, name: 'proj' }]))
+      if (url.includes('/api/files'))
+        return Promise.resolve(jsonResponse({ files: [{ relPath: 'a.md', size: 5, mtimeMs: 1 }] }))
+      if (options?.method === 'PUT') {
+        putCount++
+        if (putCount === 1) {
+          return Promise.resolve(
+            jsonResponse({ errorCode: 'CONFLICT', currentContent: '# External', currentMtimeMs: 99 }, 409)
+          )
+        }
+        // Second PUT is the force-save triggered by "Keep Mine" — stays in
+        // flight (deferred) so a concurrent edit can race it.
+        return forcePutPromise
+      }
+      if (url.includes('/api/file?')) return Promise.resolve(jsonResponse({ content: '# Hi', mtimeMs: 1, encoding: 'utf-8' }))
+      return Promise.resolve(jsonResponse({}))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+    await waitFor(() => screen.getByText('a.md'))
+    fireEvent.click(screen.getByText('a.md'))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Hi' })).toBeInTheDocument())
+    fireEvent.click(screen.getByTestId('mode-edit'))
+    const textarea = await findEditorTextarea()
+    fireEvent.change(textarea, { target: { value: '# Hi edited' } })
+    fireEvent.keyDown(textarea, { key: 's', ctrlKey: true })
+
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
+
+    // Click "Keep Mine" — this issues the force-PUT, which stays pending.
+    fireEvent.click(screen.getByRole('button', { name: /keep mine/i }))
+
+    // The user keeps typing *while* the force-save PUT is still in flight —
+    // this newer edit was never sent to the server.
+    await waitFor(() => expect(putCount).toBe(2))
+    fireEvent.change(textarea, { target: { value: '# Hi edited even more' } })
+    expect(localStorage.getItem('mvs-draft:0:a.md')).toBe('# Hi edited even more')
+
+    // Now let the force-save PUT (which only ever carried "# Hi edited") succeed.
+    await act(async () => {
+      resolveForcePut!(jsonResponse({ mtimeMs: 100 }))
+      // Flush the microtask chain inside handleKeepMine's success branch past
+      // a real macrotask boundary so it has definitely run before asserting.
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    // The content that was actually force-PUT ("# Hi edited") is stale — the
+    // tab now holds "# Hi edited even more", which was never sent to the
+    // server. The tab must still read as dirty, and the draft (the only copy
+    // of "even more") must NOT have been deleted, or a crash right now loses
+    // those keystrokes for good.
+    expect(screen.getByTestId('tab-bar').textContent).toContain('●')
+    expect(localStorage.getItem('mvs-draft:0:a.md')).toBe('# Hi edited even more')
+  })
+
   it('Discard Mine reloads the externally-modified content into the tab and clears the draft, without retrying the save', async () => {
     const fetchMock = vi.fn().mockImplementation((url: string, options?: RequestInit) => {
       if (url.includes('/api/roots')) return Promise.resolve(jsonResponse([{ id: 0, name: 'proj' }]))

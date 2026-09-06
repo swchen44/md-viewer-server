@@ -151,6 +151,16 @@ export function App() {
     })
   }
 
+  // Both handleSave and handleKeepMine issue a PUT and, once it resolves,
+  // need to know whether the tab's content is still what was actually sent —
+  // the user may have kept typing during the round-trip. Compare against
+  // tabsRef (the true latest content), not a `tab`/`tabs` snapshot captured
+  // when the PUT started, which goes stale the moment the user edits again.
+  function contentUnchangedSince(tabId: string, contentAtPutTime: string | null): boolean {
+    const currentTab = tabsRef.current.find((t) => t.id === tabId)
+    return currentTab?.content === contentAtPutTime
+  }
+
   async function handleSave(tabId: string) {
     const tab = tabs.find((t) => t.id === tabId)
     if (!tab) return
@@ -158,25 +168,21 @@ export function App() {
     const res = await putFile(tab, false)
     if (res.ok) {
       const data = await res.json()
-      // The user may have kept typing while this PUT was in flight — compare
-      // against tabsRef (the true latest content) rather than the `tab`
-      // closed over above, which is a snapshot from when the save started.
       // If content changed during the save, this is a legitimate race: only
       // the mtimeMs is safe to adopt from the response. Marking dirty:false
       // or clearing the draft here would falsely report the newer,
       // still-unsaved edits as saved and delete their only recovery copy.
-      const currentTab = tabsRef.current.find((t) => t.id === tabId)
-      const contentUnchangedDuringSave = currentTab?.content === contentAtSaveTime
+      const unchanged = contentUnchangedSince(tabId, contentAtSaveTime)
       setTabs((prev) =>
         prev.map((t) =>
           t.id === tabId
-            ? contentUnchangedDuringSave
+            ? unchanged
               ? { ...t, mtimeMs: data.mtimeMs, dirty: false }
               : { ...t, mtimeMs: data.mtimeMs }
             : t
         )
       )
-      if (contentUnchangedDuringSave) {
+      if (unchanged) {
         clearDraft()
       }
       return
@@ -193,11 +199,27 @@ export function App() {
     if (!conflict) return
     const tab = tabs.find((t) => t.id === conflict.tabId)
     if (tab) {
+      const contentAtForceSaveTime = tab.content
       const res = await putFile(tab, true)
       if (res.ok) {
         const data = await res.json()
-        setTabs((prev) => prev.map((t) => (t.id === tab.id ? { ...t, mtimeMs: data.mtimeMs, dirty: false } : t)))
-        clearDraft()
+        // Same race as handleSave: the non-modal ConflictDialog leaves the
+        // editor interactive, so the user may keep typing while this
+        // force-save PUT is in flight. Only clear dirty/draft if nothing
+        // changed since the force-save was sent.
+        const unchanged = contentUnchangedSince(tab.id, contentAtForceSaveTime)
+        setTabs((prev) =>
+          prev.map((t) =>
+            t.id === tab.id
+              ? unchanged
+                ? { ...t, mtimeMs: data.mtimeMs, dirty: false }
+                : { ...t, mtimeMs: data.mtimeMs }
+              : t
+          )
+        )
+        if (unchanged) {
+          clearDraft()
+        }
       } else {
         console.error('Failed to force-save file', res.status)
       }
