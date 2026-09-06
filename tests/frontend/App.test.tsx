@@ -55,6 +55,12 @@ describe('App layout', () => {
     fireEvent.click(outlineButton)
     expect(screen.getByTestId('sidebar')).toHaveAttribute('data-mode', 'outline')
   })
+
+  it('clicking the settings gear opens the settings modal', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: /settings/i }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
 })
 
 describe('App roots error handling', () => {

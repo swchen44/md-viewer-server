@@ -35,5 +35,14 @@
   },
   "app": {
     "saveError": "파일 저장에 실패했습니다. 변경 내용은 유지됩니다."
+  },
+  "settings": {
+    "dialogTitle": "설정",
+    "generalTab": "일반",
+    "appearanceTab": "화면",
+    "customCssTab": "사용자 지정 CSS"
+  },
+  "topBar": {
+    "settingsLabel": "설정"
   }
 }

@@ -35,5 +35,14 @@
   },
   "app": {
     "saveError": "Failed to save the file. Your edits are kept."
+  },
+  "settings": {
+    "dialogTitle": "Settings",
+    "generalTab": "General",
+    "appearanceTab": "Appearance",
+    "customCssTab": "Custom CSS"
+  },
+  "topBar": {
+    "settingsLabel": "Settings"
   }
 }

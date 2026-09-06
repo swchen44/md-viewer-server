@@ -35,5 +35,14 @@
   },
   "app": {
     "saveError": "ファイルの保存に失敗しました。変更内容は保持されています。"
+  },
+  "settings": {
+    "dialogTitle": "設定",
+    "generalTab": "一般",
+    "appearanceTab": "外観",
+    "customCssTab": "カスタム CSS"
+  },
+  "topBar": {
+    "settingsLabel": "設定"
   }
 }

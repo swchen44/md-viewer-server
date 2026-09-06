@@ -35,5 +35,14 @@
   },
   "app": {
     "saveError": "保存文件失败,您的更改已保留。"
+  },
+  "settings": {
+    "dialogTitle": "设置",
+    "generalTab": "通用",
+    "appearanceTab": "外观",
+    "customCssTab": "自定义 CSS"
+  },
+  "topBar": {
+    "settingsLabel": "设置"
   }
 }
