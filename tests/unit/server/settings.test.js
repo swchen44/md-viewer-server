@@ -50,6 +50,12 @@ describe('settings', () => {
     expect(readSettings(freshDir).plantumlServerUrl).toBe('https://plantuml.example.com')
   })
 
+  it('defaults sendToPlantUmlServer to false and persists it when set', () => {
+    expect(readSettings(configDir).sendToPlantUmlServer).toBe(false)
+    updateSettings(configDir, { sendToPlantUmlServer: true })
+    expect(readSettings(configDir).sendToPlantUmlServer).toBe(true)
+  })
+
   describe('key whitelist', () => {
     it('rejects daemon lifecycle keys instead of merging them into config.json', () => {
       const before = JSON.parse(fs.readFileSync(path.join(configDir, 'config.json'), 'utf-8'))

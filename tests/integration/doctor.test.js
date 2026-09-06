@@ -32,7 +32,10 @@ describe('runDoctor', () => {
 
   it('reports ok for a valid, readable/writable root', async () => {
     loadOrCreateConfig(configDir, { roots: [rootDir], port: 5990 })
-    updateSettings(configDir, { plantumlServerUrl: UNREACHABLE_PLANTUML_URL })
+    updateSettings(configDir, {
+      plantumlServerUrl: UNREACHABLE_PLANTUML_URL,
+      sendToPlantUmlServer: true,
+    })
     const results = await runDoctor({ configDir, stateDir, roots: [rootDir], port: 5990 })
     const rootCheck = results.find((r) => r.name === 'root-accessible')
     expect(rootCheck.status).toBe('ok')
@@ -41,7 +44,10 @@ describe('runDoctor', () => {
   it('reports fail for a nonexistent root', async () => {
     const missingRoot = path.join(rootDir, 'does-not-exist')
     loadOrCreateConfig(configDir, { roots: [missingRoot], port: 5990 })
-    updateSettings(configDir, { plantumlServerUrl: UNREACHABLE_PLANTUML_URL })
+    updateSettings(configDir, {
+      plantumlServerUrl: UNREACHABLE_PLANTUML_URL,
+      sendToPlantUmlServer: true,
+    })
     const results = await runDoctor({ configDir, stateDir, roots: [missingRoot], port: 5990 })
     const rootCheck = results.find((r) => r.name === 'root-accessible')
     expect(rootCheck.status).toBe('fail')
@@ -49,7 +55,10 @@ describe('runDoctor', () => {
 
   it('reports not-running for daemon-status when nothing is listening', async () => {
     loadOrCreateConfig(configDir, { roots: [rootDir], port: 5991 })
-    updateSettings(configDir, { plantumlServerUrl: UNREACHABLE_PLANTUML_URL })
+    updateSettings(configDir, {
+      plantumlServerUrl: UNREACHABLE_PLANTUML_URL,
+      sendToPlantUmlServer: true,
+    })
     const results = await runDoctor({ configDir, stateDir, roots: [rootDir], port: 5991 })
     const daemonCheck = results.find((r) => r.name === 'daemon-running')
     expect(daemonCheck.status).toBe('warn')
@@ -57,7 +66,10 @@ describe('runDoctor', () => {
 
   it('reports ok for config validity when config.json is well-formed', async () => {
     loadOrCreateConfig(configDir, { roots: [rootDir], port: 5992 })
-    updateSettings(configDir, { plantumlServerUrl: UNREACHABLE_PLANTUML_URL })
+    updateSettings(configDir, {
+      plantumlServerUrl: UNREACHABLE_PLANTUML_URL,
+      sendToPlantUmlServer: true,
+    })
     const results = await runDoctor({ configDir, stateDir, roots: [rootDir], port: 5992 })
     const configCheck = results.find((r) => r.name === 'config-valid')
     expect(configCheck.status).toBe('ok')
@@ -65,7 +77,10 @@ describe('runDoctor', () => {
 
   it('includes all 11 expected checks', async () => {
     loadOrCreateConfig(configDir, { roots: [rootDir], port: 5993 })
-    updateSettings(configDir, { plantumlServerUrl: UNREACHABLE_PLANTUML_URL })
+    updateSettings(configDir, {
+      plantumlServerUrl: UNREACHABLE_PLANTUML_URL,
+      sendToPlantUmlServer: true,
+    })
     const results = await runDoctor({ configDir, stateDir, roots: [rootDir], port: 5993 })
     const names = results.map((r) => r.name)
     expect(names).toEqual([
@@ -85,7 +100,10 @@ describe('runDoctor', () => {
 
   it('reports the configured (non-default) PlantUML server URL reachability, not a hardcoded one', async () => {
     loadOrCreateConfig(configDir, { roots: [rootDir], port: 5994 })
-    updateSettings(configDir, { plantumlServerUrl: UNREACHABLE_PLANTUML_URL })
+    updateSettings(configDir, {
+      plantumlServerUrl: UNREACHABLE_PLANTUML_URL,
+      sendToPlantUmlServer: true,
+    })
     const results = await runDoctor({ configDir, stateDir, roots: [rootDir], port: 5994 })
     const plantUmlCheck = results.find((r) => r.name === 'plantuml-reachable')
     expect(plantUmlCheck.message).toContain('127.0.0.1:1')
@@ -102,7 +120,10 @@ describe('runDoctor', () => {
 
     try {
       loadOrCreateConfig(configDir, { roots: [rootDir], port: 5995 })
-      updateSettings(configDir, { plantumlServerUrl: `http://127.0.0.1:${fakeUpstreamPort}` })
+      updateSettings(configDir, {
+        plantumlServerUrl: `http://127.0.0.1:${fakeUpstreamPort}`,
+        sendToPlantUmlServer: true,
+      })
       const results = await runDoctor({ configDir, stateDir, roots: [rootDir], port: 5995 })
       const plantUmlCheck = results.find((r) => r.name === 'plantuml-reachable')
       expect(plantUmlCheck.status).toBe('ok')
@@ -110,5 +131,41 @@ describe('runDoctor', () => {
     } finally {
       await new Promise((resolve) => fakeUpstream.close(resolve))
     }
+  })
+
+  it('skips the PlantUML reachability check entirely when sending is disabled', async () => {
+    // A server that would answer if probed — but sendToPlantUmlServer is off,
+    // so doctor must not touch it (design check #10 is conditional).
+    let hits = 0
+    const fakeUpstream = http.createServer((req, res) => {
+      hits++
+      res.statusCode = 200
+      res.end('ok')
+    })
+    await new Promise((resolve) => fakeUpstream.listen(0, '127.0.0.1', resolve))
+    const fakeUpstreamPort = fakeUpstream.address().port
+
+    try {
+      loadOrCreateConfig(configDir, { roots: [rootDir], port: 5996 })
+      updateSettings(configDir, {
+        plantumlServerUrl: `http://127.0.0.1:${fakeUpstreamPort}`,
+        sendToPlantUmlServer: false,
+      })
+      const results = await runDoctor({ configDir, stateDir, roots: [rootDir], port: 5996 })
+      const plantUmlCheck = results.find((r) => r.name === 'plantuml-reachable')
+      expect(plantUmlCheck.status).toBe('ok')
+      expect(plantUmlCheck.message).toBe('PlantUML sending disabled, skipped')
+      expect(hits).toBe(0)
+    } finally {
+      await new Promise((resolve) => fakeUpstream.close(resolve))
+    }
+  })
+
+  it('does not probe the network when the toggle has never been set (default off)', async () => {
+    loadOrCreateConfig(configDir, { roots: [rootDir], port: 5997 })
+    const results = await runDoctor({ configDir, stateDir, roots: [rootDir], port: 5997 })
+    const plantUmlCheck = results.find((r) => r.name === 'plantuml-reachable')
+    expect(plantUmlCheck.status).toBe('ok')
+    expect(plantUmlCheck.message).toBe('PlantUML sending disabled, skipped')
   })
 })

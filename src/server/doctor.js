@@ -103,7 +103,17 @@ function checkInotifyLimit(roots) {
 }
 
 async function checkPlantUmlReachable(configDir) {
-  const { plantumlServerUrl } = readSettings(configDir)
+  const { plantumlServerUrl, sendToPlantUmlServer } = readSettings(configDir)
+  // Per design check #10 this is conditional: only probe the server when the
+  // user has actually opted into sending diagram source to it. Air-gapped
+  // installs should never see doctor make a network call, let alone warn.
+  if (!sendToPlantUmlServer) {
+    return {
+      name: 'plantuml-reachable',
+      status: 'ok',
+      message: 'PlantUML sending disabled, skipped',
+    }
+  }
   try {
     const res = await fetch(plantumlServerUrl, { signal: AbortSignal.timeout(3000) })
     return res.status < 500

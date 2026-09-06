@@ -7,7 +7,7 @@ const DEFAULT_PLANTUML_SERVER_URL = 'https://www.plantuml.com/plantuml'
 // roots) that only the CLI owns, and user settings that the UI may change.
 // Only the keys listed here are settings; everything else is rejected so the
 // settings endpoint can never rewrite the daemon's own identity.
-const ALLOWED_SETTINGS_KEYS = ['plantumlServerUrl']
+const ALLOWED_SETTINGS_KEYS = ['plantumlServerUrl', 'sendToPlantUmlServer']
 
 export class InvalidSettingsError extends Error {
   constructor(message, { invalidKeys = [] } = {}) {
@@ -22,6 +22,7 @@ export function readSettings(configDir) {
   const config = readConfig(configDir) ?? {}
   return {
     plantumlServerUrl: config.plantumlServerUrl ?? DEFAULT_PLANTUML_SERVER_URL,
+    sendToPlantUmlServer: config.sendToPlantUmlServer ?? false,
   }
 }
 
