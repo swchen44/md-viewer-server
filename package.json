@@ -9,6 +9,11 @@
   "bin": {
     "md-viewer-server": "./bin/cli.js"
   },
+  "files": [
+    "bin/**",
+    "src/**",
+    "dist/**"
+  ],
   "scripts": {
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
@@ -17,7 +22,8 @@
     "typecheck:frontend": "tsc --noEmit -p tsconfig.json",
     "build": "node scripts/build.js",
     "dev:frontend": "vite",
-    "build:frontend": "vite build"
+    "build:frontend": "vite build",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "chokidar": "^5.0.0",
