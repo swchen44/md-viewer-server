@@ -145,6 +145,27 @@ describe('settings', () => {
     })
   })
 
+  describe('custom CSS choice', () => {
+    it('defaults CSS choice to user1 with empty slots', () => {
+      const settings = readSettings(configDir)
+      expect(settings.customCssChoice).toBe('user1')
+      expect(settings.customCssUser1).toBe('')
+      expect(settings.customCssUser2).toBe('')
+    })
+
+    it('accepts CSS choice fields through updateSettings', () => {
+      updateSettings(configDir, {
+        customCssChoice: 'user2',
+        customCssUser1: '.markdown-body { color: blue; }',
+        customCssUser2: '.markdown-body { color: green; }',
+      })
+      const settings = readSettings(configDir)
+      expect(settings.customCssChoice).toBe('user2')
+      expect(settings.customCssUser1).toBe('.markdown-body { color: blue; }')
+      expect(settings.customCssUser2).toBe('.markdown-body { color: green; }')
+    })
+  })
+
   describe('plantumlServerUrl validation', () => {
     it('rejects a string that is not a URL at all', () => {
       expect(() => updateSettings(configDir, { plantumlServerUrl: 'not a url' })).toThrow(

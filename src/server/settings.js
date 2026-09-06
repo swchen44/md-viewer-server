@@ -14,6 +14,9 @@ const ALLOWED_SETTINGS_KEYS = [
   'blockRemoteContent',
   'allowHtmlScripts',
   'bakOnSave',
+  'customCssChoice',
+  'customCssUser1',
+  'customCssUser2',
 ]
 
 export class InvalidSettingsError extends Error {
@@ -61,6 +64,9 @@ export function readSettings(configDir) {
     blockRemoteContent,
     allowHtmlScripts,
     bakOnSave: config.bakOnSave ?? false,
+    customCssChoice: config.customCssChoice ?? 'user1',
+    customCssUser1: config.customCssUser1 ?? '',
+    customCssUser2: config.customCssUser2 ?? '',
     // Privacy mode locks these three to safe values for any code path that
     // makes a security-relevant decision. Stored preferences above are left
     // untouched so disabling privacy mode restores what the user had.
