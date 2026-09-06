@@ -50,6 +50,27 @@ describe('unmatched /api/* requests', () => {
     expect(res.status).toBe(404)
     expect(res.body).toEqual({ errorCode: 'NOT_FOUND' })
   })
+
+  it('returns a JSON 404 for a non-GET request to an unmatched /api/* path', async () => {
+    const { app } = buildTestApp()
+    const res = await request(app)
+      .post('/api/this-does-not-exist')
+      .set('X-Auth-Token', '1234')
+    expect(res.status).toBe(404)
+    expect(res.body).toEqual({ errorCode: 'NOT_FOUND' })
+    expect(res.headers['content-type']).toMatch(/json/)
+  })
+
+  it('returns a JSON 404 for a non-GET request to a GET-only /api path', async () => {
+    const { app } = buildTestApp()
+    // /api/health is only registered as GET — PUT should 404 JSON, not fall
+    // through to Express's default HTML 404.
+    const res = await request(app)
+      .put('/api/health')
+      .set('X-Auth-Token', '1234')
+    expect(res.status).toBe(404)
+    expect(res.body).toEqual({ errorCode: 'NOT_FOUND' })
+  })
 })
 
 describe('POST /api/shutdown', () => {

@@ -72,23 +72,24 @@ export function createApp({
   })
 
   // Registered after every /api route above, so Express (which matches
-  // routes in registration order) never lets this shadow an API request.
+  // routes in registration order) never lets this shadow an API request. A
+  // request under /api/* reaching this point matches no real API route
+  // above — either the path doesn't exist or it exists under a different
+  // HTTP method (e.g. GET /api/shutdown, which is POST-only). Either way it
+  // must 404 as JSON rather than silently falling through to the SPA shell
+  // (which would return a misleading 200 index.html to API callers checking
+  // res.ok) or to Express's default HTML 404. app.all (not app.get) so this
+  // also catches non-GET requests, which app.get('*', ...) below never sees.
+  app.all('/api/*', (req, res) => {
+    res.status(404).json({ errorCode: 'NOT_FOUND' })
+  })
+
   // No authMiddleware here on purpose: the browser needs to load the JS
   // bundle before it can read the token out of the URL and store it in
   // sessionStorage (see src/frontend/auth.ts's initAuthFromUrl()), so the
   // static shell itself must be servable without the token.
   app.use(express.static(FRONTEND_DIST))
   app.get('*', (req, res) => {
-    // A request under /api/* reaching this point matches no real API route
-    // above — either the path doesn't exist or it exists under a different
-    // HTTP method (e.g. GET /api/shutdown, which is POST-only). Either way it
-    // must 404 as JSON rather than silently falling through to the SPA shell,
-    // which would return a misleading 200 index.html to API callers checking
-    // res.ok.
-    if (req.path.startsWith('/api/')) {
-      res.status(404).json({ errorCode: 'NOT_FOUND' })
-      return
-    }
     res.sendFile(path.join(FRONTEND_DIST, 'index.html'))
   })
 
