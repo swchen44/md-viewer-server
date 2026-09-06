@@ -6,6 +6,7 @@
   "search": {
     "placeholder": "검색...",
     "targetName": "파일명",
+    "targetTitle": "제목",
     "targetContent": "내용",
     "targetBoth": "둘 다",
     "scopeAll": "모든 파일",

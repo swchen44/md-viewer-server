@@ -6,6 +6,7 @@
   "search": {
     "placeholder": "搜尋...",
     "targetName": "檔名",
+    "targetTitle": "標題",
     "targetContent": "內容",
     "targetBoth": "兩者",
     "scopeAll": "全部檔案",

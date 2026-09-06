@@ -6,6 +6,7 @@
   "search": {
     "placeholder": "Search...",
     "targetName": "Name",
+    "targetTitle": "Title",
     "targetContent": "Content",
     "targetBoth": "Both",
     "scopeAll": "All files",

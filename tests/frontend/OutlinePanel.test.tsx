@@ -118,4 +118,96 @@ describe('OutlinePanel', () => {
     await waitFor(() => expect(screen.getByText('Intro')).toBeInTheDocument())
     expect(screen.queryByText(/failed to load outline/i)).not.toBeInTheDocument()
   })
+
+  it('filters headings by a plain-text query, case-insensitively', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            headings: [
+              { level: 1, text: 'Intro', line: 1 },
+              { level: 2, text: 'Details', line: 5 },
+            ],
+          })
+        )
+      )
+    )
+    render(
+      <OutlinePanel
+        activeTab={{ rootId: 0, relPath: 'a.md' }}
+        onJumpToHeading={() => {}}
+        headingFilter={{ query: 'intro', regex: false }}
+      />
+    )
+    await waitFor(() => expect(screen.getByText('Intro')).toBeInTheDocument())
+    expect(screen.queryByText('Details')).not.toBeInTheDocument()
+  })
+
+  it('filters headings using a regex query', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            headings: [
+              { level: 1, text: 'Intro', line: 1 },
+              { level: 2, text: 'Details', line: 5 },
+            ],
+          })
+        )
+      )
+    )
+    render(
+      <OutlinePanel
+        activeTab={{ rootId: 0, relPath: 'a.md' }}
+        onJumpToHeading={() => {}}
+        headingFilter={{ query: '^D', regex: true }}
+      />
+    )
+    await waitFor(() => expect(screen.getByText('Details')).toBeInTheDocument())
+    expect(screen.queryByText('Intro')).not.toBeInTheDocument()
+  })
+
+  it('shows all headings when headingFilter query is empty', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            headings: [
+              { level: 1, text: 'Intro', line: 1 },
+              { level: 2, text: 'Details', line: 5 },
+            ],
+          })
+        )
+      )
+    )
+    render(
+      <OutlinePanel
+        activeTab={{ rootId: 0, relPath: 'a.md' }}
+        onJumpToHeading={() => {}}
+        headingFilter={{ query: '', regex: false }}
+      />
+    )
+    await waitFor(() => expect(screen.getByText('Intro')).toBeInTheDocument())
+    expect(screen.getByText('Details')).toBeInTheDocument()
+  })
+
+  it('shows no headings for an invalid regex instead of crashing', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ headings: [{ level: 1, text: 'Intro', line: 1 }] }))
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    render(
+      <OutlinePanel
+        activeTab={{ rootId: 0, relPath: 'a.md' }}
+        onJumpToHeading={() => {}}
+        headingFilter={{ query: '(unclosed', regex: true }}
+      />
+    )
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(screen.queryByText('Intro')).not.toBeInTheDocument()
+  })
 })

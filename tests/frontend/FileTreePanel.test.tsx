@@ -58,4 +58,74 @@ describe('FileTreePanel', () => {
     fireEvent.click(screen.getByText('a.md'))
     expect(onOpenFile).toHaveBeenCalledWith(0, 'a.md')
   })
+
+  it('renders a results list instead of the tree when searchResults is provided', () => {
+    mockFetchSequence([{ files: [{ relPath: 'a.md', size: 10, mtimeMs: 1 }] }])
+    const onOpenFile = vi.fn()
+    render(
+      <FileTreePanel
+        roots={[{ id: 0, name: 'proj' }]}
+        onOpenFile={onOpenFile}
+        searchResults={{
+          fileMatches: [{ relPath: 'name-match.md', size: 5, mtimeMs: 1, rootId: 0 }],
+          contentMatches: [
+            {
+              relPath: 'content-match.md',
+              rootId: 0,
+              matches: [{ line: 3, text: 'hello world' }],
+            },
+          ],
+        }}
+      />
+    )
+
+    expect(screen.getByText('name-match.md')).toBeInTheDocument()
+    expect(screen.getByText('content-match.md')).toBeInTheDocument()
+    expect(screen.getByText(/hello world/)).toBeInTheDocument()
+    expect(screen.queryByText('a.md')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('name-match.md'))
+    expect(onOpenFile).toHaveBeenCalledWith(0, 'name-match.md')
+
+    fireEvent.click(screen.getByText('content-match.md'))
+    expect(onOpenFile).toHaveBeenCalledWith(0, 'content-match.md')
+  })
+
+  it('merges search results carrying different rootIds so onOpenFile opens the right root', () => {
+    mockFetchSequence([{ files: [] }, { files: [] }])
+    const onOpenFile = vi.fn()
+    render(
+      <FileTreePanel
+        roots={[
+          { id: 0, name: 'proj1' },
+          { id: 1, name: 'proj2' },
+        ]}
+        onOpenFile={onOpenFile}
+        searchResults={{
+          fileMatches: [
+            { relPath: 'a.md', size: 1, mtimeMs: 1, rootId: 0 },
+            { relPath: 'a.md', size: 1, mtimeMs: 1, rootId: 1 },
+          ],
+          contentMatches: [],
+        }}
+      />
+    )
+
+    const matches = screen.getAllByText('a.md')
+    expect(matches).toHaveLength(2)
+    fireEvent.click(matches[1])
+    expect(onOpenFile).toHaveBeenCalledWith(1, 'a.md')
+  })
+
+  it('falls back to the tree view when searchResults is null', async () => {
+    mockFetchSequence([{ files: [{ relPath: 'a.md', size: 10, mtimeMs: 1 }] }])
+    render(
+      <FileTreePanel
+        roots={[{ id: 0, name: 'proj' }]}
+        onOpenFile={() => {}}
+        searchResults={null}
+      />
+    )
+    await waitFor(() => expect(screen.getByText('a.md')).toBeInTheDocument())
+  })
 })

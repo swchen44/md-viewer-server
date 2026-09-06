@@ -13,9 +13,15 @@ interface ActiveTabRef {
   relPath: string
 }
 
+export interface HeadingFilter {
+  query: string
+  regex: boolean
+}
+
 interface OutlinePanelProps {
   activeTab: ActiveTabRef | null
   onJumpToHeading: (line: number) => void
+  headingFilter?: HeadingFilter | null
 }
 
 function sameTab(a: ActiveTabRef | null, b: ActiveTabRef | null): boolean {
@@ -24,7 +30,29 @@ function sameTab(a: ActiveTabRef | null, b: ActiveTabRef | null): boolean {
   return a.rootId === b.rootId && a.relPath === b.relPath
 }
 
-export function OutlinePanel({ activeTab, onJumpToHeading }: OutlinePanelProps) {
+// Outline search never calls an API: the headings for the active tab are already
+// loaded in memory (fetched once per tab above), so filtering is purely client-side.
+function applyHeadingFilter(headings: Heading[], filter: HeadingFilter | null | undefined): Heading[] {
+  if (!filter || !filter.query) return headings
+
+  if (filter.regex) {
+    let pattern: RegExp
+    try {
+      pattern = new RegExp(filter.query, 'i')
+    } catch {
+      // An invalid pattern from a still-mid-typing query shouldn't crash the
+      // panel — show no matches instead, mirroring how the backend's regex
+      // search treats invalid patterns as "no valid search" rather than an error.
+      return []
+    }
+    return headings.filter((h) => pattern.test(h.text))
+  }
+
+  const needle = filter.query.toLowerCase()
+  return headings.filter((h) => h.text.toLowerCase().includes(needle))
+}
+
+export function OutlinePanel({ activeTab, onJumpToHeading, headingFilter }: OutlinePanelProps) {
   const { t } = useTranslation()
   const [headings, setHeadings] = useState<Heading[]>([])
   const [loadError, setLoadError] = useState(false)
@@ -76,9 +104,11 @@ export function OutlinePanel({ activeTab, onJumpToHeading }: OutlinePanelProps) 
     )
   }
 
+  const visibleHeadings = applyHeadingFilter(headings, headingFilter)
+
   return (
     <div data-testid="outline-panel">
-      {headings.map((h) => (
+      {visibleHeadings.map((h) => (
         <div
           key={h.line}
           onClick={() => onJumpToHeading(h.line)}

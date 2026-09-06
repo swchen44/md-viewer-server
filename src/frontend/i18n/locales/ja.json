@@ -6,6 +6,7 @@
   "search": {
     "placeholder": "検索...",
     "targetName": "ファイル名",
+    "targetTitle": "見出し",
     "targetContent": "内容",
     "targetBoth": "両方",
     "scopeAll": "すべてのファイル",
