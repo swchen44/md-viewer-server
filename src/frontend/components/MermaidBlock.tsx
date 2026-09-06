@@ -1,13 +1,48 @@
+import { useEffect, useRef, useState } from 'react'
+import mermaid from 'mermaid'
+
+mermaid.initialize({ startOnLoad: false })
+
+let renderCounter = 0
+
 interface MermaidBlockProps {
   definition: string
 }
 
-// Placeholder stub — Task 3 replaces this with real mermaid rendering behind
-// the same {definition} prop contract. It exists here only so MarkdownView's
-// mermaid-detection tests can compile and pass independently of Task 3. The
-// definition is stashed on a data attribute (rather than left unused) so
-// this repo's no-unused-vars lint rule stays clean without an underscore-
-// prefix exemption this config doesn't grant.
 export function MermaidBlock({ definition }: MermaidBlockProps) {
-  return <div data-testid="mermaid-block" data-definition={definition} />
+  const [svg, setSvg] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const idRef = useRef(`mermaid-${renderCounter++}`)
+
+  // Adjust state during render (React's documented pattern for resetting
+  // state when a prop changes) rather than synchronously in the effect
+  // below, which this repo's react-hooks/set-state-in-effect lint rule
+  // flags — see OutlinePanel.tsx for the same pattern.
+  const [prevDefinition, setPrevDefinition] = useState(definition)
+  if (prevDefinition !== definition) {
+    setPrevDefinition(definition)
+    setError(null)
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    mermaid
+      .render(idRef.current, definition)
+      .then((result) => {
+        if (!cancelled) setSvg(result.svg)
+      })
+      .catch(() => {
+        if (!cancelled) setError('Diagram error: could not render this diagram.')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [definition])
+
+  return (
+    <div data-testid="mermaid-block">
+      {error && <p>{error}</p>}
+      {svg && <div dangerouslySetInnerHTML={{ __html: svg }} />}
+    </div>
+  )
 }
