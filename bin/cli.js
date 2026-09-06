@@ -3,6 +3,7 @@ import { parseArgs } from '../src/server/commands/cli-args.js'
 import { runStart } from '../src/server/commands/start.js'
 import { runStatus } from '../src/server/commands/status.js'
 import { runStop } from '../src/server/commands/stop.js'
+import { restartForRotatedToken } from '../src/server/commands/rotate-restart.js'
 import { runDoctor } from '../src/server/doctor.js'
 import { getConfigDir, getStateDir } from '../src/server/xdg-paths.js'
 import { readConfig, rotateToken } from '../src/server/config.js'
@@ -82,8 +83,17 @@ async function main() {
       // The running daemon read config.json once at startup, so the
       // rotated token has no effect on it yet. Restart so the freshly
       // spawned process picks up the new token from the updated config.
-      await runStop()
+      const restart = await restartForRotatedToken({ roots, port, debug })
+      if (restart.outcome === 'stop-failed') {
+        console.error(
+          'Token rotated in config.json, but the running daemon could not be stopped to apply it.'
+        )
+        process.exitCode = 1
+        return
+      }
       console.log('Token rotated; daemon restarted to apply it.')
+      printStartResult(restart.startResult)
+      return
     }
     printStartResult(await runStart({ roots, port, debug }))
   } else if (command === 'status') {
