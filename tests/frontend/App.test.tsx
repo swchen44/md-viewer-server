@@ -402,7 +402,10 @@ describe('App search wiring', () => {
 
 describe('App main content, save, draft, and conflict wiring', () => {
   beforeEach(() => localStorage.clear())
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+  })
 
   it('opens a file and shows its content in the main content area', async () => {
     stubRoutedFetch([
@@ -448,7 +451,10 @@ describe('App main content, save, draft, and conflict wiring', () => {
     fireEvent.change(textarea, { target: { value: '# Hi edited' } })
 
     expect(screen.getByTestId('tab-bar').textContent).toContain('●')
-    expect(localStorage.getItem('mvs-draft:0:a.md')).toBe('# Hi edited')
+    // Draft persistence is debounced (Bug 3 fix) — the localStorage write
+    // trails the in-memory update by up to ~300ms rather than being
+    // synchronous with the keystroke.
+    await waitFor(() => expect(localStorage.getItem('mvs-draft:0:a.md')).toBe('# Hi edited'))
   })
 
   it('Ctrl+S saves the active tab: PUTs the content+mtime, then updates mtimeMs, clears dirty, and clears the draft', async () => {
@@ -511,9 +517,11 @@ describe('App main content, save, draft, and conflict wiring', () => {
     fireEvent.keyDown(textarea, { key: 's', ctrlKey: true })
 
     // Edit #2 happens *while* the PUT for edit #1 is still pending — the user
-    // kept typing before the save round-trip completed.
+    // kept typing before the save round-trip completed. Draft persistence is
+    // debounced (Bug 3 fix), so wait out the debounce window rather than
+    // asserting synchronously.
     fireEvent.change(textarea, { target: { value: '# Hi edited more' } })
-    expect(localStorage.getItem('mvs-draft:0:a.md')).toBe('# Hi edited more')
+    await waitFor(() => expect(localStorage.getItem('mvs-draft:0:a.md')).toBe('# Hi edited more'))
 
     // Now let the in-flight PUT (which only ever carried "# Hi edited") succeed.
     await waitFor(() =>
@@ -621,10 +629,12 @@ describe('App main content, save, draft, and conflict wiring', () => {
     fireEvent.click(screen.getByRole('button', { name: /keep mine/i }))
 
     // The user keeps typing *while* the force-save PUT is still in flight —
-    // this newer edit was never sent to the server.
+    // this newer edit was never sent to the server. Draft persistence is
+    // debounced (Bug 3 fix), so wait out the debounce window rather than
+    // asserting synchronously.
     await waitFor(() => expect(putCount).toBe(2))
     fireEvent.change(textarea, { target: { value: '# Hi edited even more' } })
-    expect(localStorage.getItem('mvs-draft:0:a.md')).toBe('# Hi edited even more')
+    await waitFor(() => expect(localStorage.getItem('mvs-draft:0:a.md')).toBe('# Hi edited even more'))
 
     // Now let the force-save PUT (which only ever carried "# Hi edited") succeed.
     await act(async () => {
@@ -683,6 +693,128 @@ describe('App main content, save, draft, and conflict wiring', () => {
       ([, opts]) => (opts as RequestInit | undefined)?.method === 'PUT'
     ).length
     expect(putCallsAfter).toBe(putCallsBefore)
+  })
+
+  it('does not resurrect a stale ConflictDialog (or fire an unwanted force-PUT) when a tab with an unresolved 409 conflict is closed and the same file is reopened', async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string, options?: RequestInit) => {
+      if (url.includes('/api/roots')) return Promise.resolve(jsonResponse([{ id: 0, name: 'proj' }]))
+      if (url.includes('/api/files'))
+        return Promise.resolve(jsonResponse({ files: [{ relPath: 'a.md', size: 5, mtimeMs: 1 }] }))
+      if (options?.method === 'PUT') {
+        return Promise.resolve(
+          jsonResponse({ errorCode: 'CONFLICT', currentContent: '# External', currentMtimeMs: 99 }, 409)
+        )
+      }
+      if (url.includes('/api/file?')) return Promise.resolve(jsonResponse({ content: '# Hi', mtimeMs: 1, encoding: 'utf-8' }))
+      return Promise.resolve(jsonResponse({}))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+    await waitFor(() => screen.getByText('a.md'))
+    fireEvent.click(screen.getByText('a.md'))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Hi' })).toBeInTheDocument())
+    fireEvent.click(screen.getByTestId('mode-edit'))
+    const textarea = await findEditorTextarea()
+    fireEvent.change(textarea, { target: { value: '# Hi edited' } })
+    fireEvent.keyDown(textarea, { key: 's', ctrlKey: true })
+
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
+    expect(screen.getByText(/External/)).toBeInTheDocument()
+
+    // Close the tab WITHOUT answering the dialog.
+    fireEvent.click(screen.getByRole('button', { name: /close a\.md/i }))
+    await waitFor(() => expect(screen.queryByTestId('mode-toggle')).not.toBeInTheDocument())
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    // Reopen the SAME file. Tab ids are deterministic (`${rootId}:${relPath}`),
+    // so the reopened tab collides with the id the stale conflict was keyed
+    // on. (The reopened tab legitimately shows the never-cleared localStorage
+    // draft rather than a fresh server fetch — that's the separate, correct
+    // "crash-recovered draft wins" behavior, not part of what's under test
+    // here.)
+    fireEvent.click(screen.getByText('a.md'))
+    await waitFor(() => expect(screen.getByTestId('mode-toggle')).toBeInTheDocument())
+
+    // The stale dialog (from the closed tab's never-resolved conflict) must
+    // not reappear, and nothing about reopening the file may have triggered
+    // an unwanted force-PUT — only the one PUT from the original Ctrl+S ever
+    // happened.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    const putCalls = fetchMock.mock.calls.filter(([, opts]) => (opts as RequestInit | undefined)?.method === 'PUT')
+    expect(putCalls).toHaveLength(1)
+  })
+
+  it('shows a user-visible, non-crashing error and keeps the tab dirty (draft intact) when a save PUT rejects with a network error', async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string, options?: RequestInit) => {
+      if (url.includes('/api/roots')) return Promise.resolve(jsonResponse([{ id: 0, name: 'proj' }]))
+      if (url.includes('/api/files'))
+        return Promise.resolve(jsonResponse({ files: [{ relPath: 'a.md', size: 5, mtimeMs: 1 }] }))
+      if (options?.method === 'PUT') return Promise.reject(new Error('network down'))
+      if (url.includes('/api/file?')) return Promise.resolve(jsonResponse({ content: '# Hi', mtimeMs: 1, encoding: 'utf-8' }))
+      return Promise.resolve(jsonResponse({}))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+    await waitFor(() => screen.getByText('a.md'))
+    fireEvent.click(screen.getByText('a.md'))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Hi' })).toBeInTheDocument())
+    fireEvent.click(screen.getByTestId('mode-edit'))
+    const textarea = await findEditorTextarea()
+    fireEvent.change(textarea, { target: { value: '# Hi edited' } })
+    expect(screen.getByTestId('tab-bar').textContent).toContain('●')
+
+    // This must not produce an unhandled promise rejection anywhere in the
+    // test run — handleSave has to catch the rejected PUT itself.
+    fireEvent.keyDown(textarea, { key: 's', ctrlKey: true })
+
+    await waitFor(() => expect(screen.getByTestId('save-error')).toBeInTheDocument())
+    // Draft/dirty state must be untouched by the failed save.
+    expect(screen.getByTestId('tab-bar').textContent).toContain('●')
+    expect(localStorage.getItem('mvs-draft:0:a.md')).toBe('# Hi edited')
+  })
+
+  it('debounces draft persistence: rapid keystrokes produce only one localStorage write, not one per keystroke', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi.fn().mockImplementation((url: string, options?: RequestInit) => {
+      if (url.includes('/api/roots')) return Promise.resolve(jsonResponse([{ id: 0, name: 'proj' }]))
+      if (url.includes('/api/files'))
+        return Promise.resolve(jsonResponse({ files: [{ relPath: 'a.md', size: 5, mtimeMs: 1 }] }))
+      if (options?.method === 'PUT') return Promise.resolve(jsonResponse({ mtimeMs: 42 }))
+      if (url.includes('/api/file?')) return Promise.resolve(jsonResponse({ content: '# Hi', mtimeMs: 1, encoding: 'utf-8' }))
+      return Promise.resolve(jsonResponse({}))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+    await vi.waitFor(() => expect(screen.getByText('a.md')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('a.md'))
+    await vi.waitFor(() => expect(screen.getByRole('heading', { name: 'Hi' })).toBeInTheDocument())
+    fireEvent.click(screen.getByTestId('mode-edit'))
+    await vi.waitFor(() => expect(document.querySelector('textarea')).toBeInTheDocument())
+    const textarea = document.querySelector('textarea') as HTMLTextAreaElement
+
+    // This repo's jsdom test environment polyfills `localStorage` with a
+    // plain class (see tests/frontend/setup.ts), not a real `Storage`
+    // instance — spy on the actual global instance's method rather than
+    // `Storage.prototype`.
+    const setItemSpy = vi.spyOn(localStorage, 'setItem')
+    fireEvent.change(textarea, { target: { value: 'a' } })
+    fireEvent.change(textarea, { target: { value: 'ab' } })
+    fireEvent.change(textarea, { target: { value: 'abc' } })
+
+    // Nothing should be written to localStorage yet — still inside the
+    // debounce window.
+    expect(setItemSpy.mock.calls.filter(([key]) => key === 'mvs-draft:0:a.md')).toHaveLength(0)
+
+    await vi.advanceTimersByTimeAsync(300)
+
+    // Exactly one write, carrying the LAST value typed.
+    expect(setItemSpy.mock.calls.filter(([key]) => key === 'mvs-draft:0:a.md')).toHaveLength(1)
+    expect(localStorage.getItem('mvs-draft:0:a.md')).toBe('abc')
+
+    setItemSpy.mockRestore()
   })
 
   it('hides the edit/split mode buttons for a non-UTF-8 file', async () => {

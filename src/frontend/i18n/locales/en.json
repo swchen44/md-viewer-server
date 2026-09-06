@@ -32,5 +32,8 @@
     "view": "View",
     "edit": "Edit",
     "split": "Split"
+  },
+  "app": {
+    "saveError": "Failed to save the file. Your edits are kept."
   }
 }

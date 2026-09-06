@@ -18,6 +18,16 @@ interface Conflict {
   currentMtimeMs: number
 }
 
+interface SaveError {
+  tabId: string
+  message: string
+}
+
+// Matches SearchBar.tsx's established 300ms debounce convention — see
+// handleChange below for what this actually debounces (only the localStorage
+// write, not the in-memory content update).
+const DRAFT_SAVE_DEBOUNCE_MS = 300
+
 export function App() {
   const { t } = useTranslation()
   const [tabs, setTabs] = useState<Tab[]>([])
@@ -41,6 +51,7 @@ export function App() {
   const [fileSearchResults, setFileSearchResults] = useState<FileSearchResults | null>(null)
   const [outlineSearchFilter, setOutlineSearchFilter] = useState<HeadingFilter | null>(null)
   const [conflict, setConflict] = useState<Conflict | null>(null)
+  const [saveError, setSaveError] = useState<SaveError | null>(null)
   // Guards against a stale /api/search response (issued per-root, then merged)
   // overwriting newer state if the user changes/clears the query before an
   // earlier request finishes — only the most recently issued search may apply.
@@ -88,6 +99,28 @@ export function App() {
   function closeTab(id: string) {
     setTabs((prev) => prev.filter((t) => t.id !== id))
     setActiveTabId((prev) => (prev === id ? null : prev))
+    // A pending conflict belongs to the save attempt that raised it, not to
+    // "a tab with this id is currently open." Left uncleared, reopening the
+    // SAME file — tab ids are deterministic (`${rootId}:${relPath}`), so a
+    // reopen reuses the exact id the stale conflict is keyed on — resurrects
+    // the OLD dialog showing OLD `currentContent`, and clicking "Keep Mine"
+    // there force-PUTs the just-reloaded content over whatever's on disk now,
+    // discarding an external edit the user never even triggered a save
+    // against in this session. Closing the tab is the clearest signal the
+    // user is abandoning that unresolved decision, so end it here.
+    //
+    // Deliberately NOT done on a plain tab *switch*: the ConflictDialog only
+    // renders while `conflict.tabId === activeTab.id` (see the render below),
+    // so switching away already hides it without discarding the pending
+    // decision, and switching back correctly re-shows the SAME dialog —
+    // nothing about briefly looking at another tab means the user resolved
+    // it. Only closing the tab, or explicitly clicking Keep Mine / Discard
+    // Mine, should end a pending conflict.
+    setConflict((prev) => (prev?.tabId === id ? null : prev))
+    // Same staleness risk applies to a save-error indicator (Bug 2): closing
+    // the tab it was about should not let it resurface against a same-id
+    // reopen.
+    setSaveError((prev) => (prev?.tabId === id ? null : prev))
   }
 
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null
@@ -118,6 +151,44 @@ export function App() {
   // wrong file, even if the active tab changes before an async call resolves.
   const { draft, saveDraft, clearDraft } = useDraft(activeTab?.rootId ?? 0, activeTab?.relPath ?? '')
 
+  // handleChange (below) debounces the localStorage write only — the
+  // in-memory content/dirty update stays synchronous so typing feels
+  // responsive. `save` captures whichever `saveDraft` closure was current
+  // when the timer was scheduled, so a flush always writes to the correct
+  // rootId/relPath key even if the active tab has since changed.
+  const pendingDraftRef = useRef<{
+    tabId: string
+    timeoutId: ReturnType<typeof setTimeout>
+    value: string
+    save: (value: string) => void
+  } | null>(null)
+
+  // Cancels the pending debounce timer (if any) and performs its localStorage
+  // write immediately. Used wherever silently losing the last keystroke(s) to
+  // a crash would be surprising: right before a save (so a later clearDraft()
+  // on success can't be undone by a debounce timer that fires afterwards and
+  // resurrects a stale draft), and whenever the user stops looking at this
+  // tab (switched away, closed it, or the app unmounted).
+  function flushPendingDraft() {
+    const pending = pendingDraftRef.current
+    if (!pending) return
+    clearTimeout(pending.timeoutId)
+    pending.save(pending.value)
+    pendingDraftRef.current = null
+  }
+
+  // Flushes on every "stopped looking at this tab" transition: switching the
+  // active tab (activeTabId changes), closing the active tab (closeTab clears
+  // activeTabId too, which is the same transition), and unmounting. The draft
+  // is only a crash-recovery safety net, not authoritative state, but it
+  // should still reflect keystrokes typed in the last <300ms before any of
+  // these, not silently drop them.
+  useEffect(() => {
+    return () => {
+      flushPendingDraft()
+    }
+  }, [activeTabId])
+
   function handleContentLoaded(tabId: string, content: string, mtimeMs: number, encoding: 'utf-8' | 'unknown') {
     // A crash-recovered draft (saved to localStorage but never successfully
     // sent to the server) must win over the just-fetched server content —
@@ -136,7 +207,17 @@ export function App() {
 
   function handleChange(tabId: string, value: string) {
     setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, content: value, dirty: true } : t)))
-    saveDraft(value)
+    // Debounce only the localStorage persistence (a JSON-stringify + disk
+    // write per keystroke is wasteful for larger files) — the in-memory
+    // update above already happened synchronously.
+    if (pendingDraftRef.current) {
+      clearTimeout(pendingDraftRef.current.timeoutId)
+    }
+    const timeoutId = setTimeout(() => {
+      saveDraft(value)
+      pendingDraftRef.current = null
+    }, DRAFT_SAVE_DEBOUNCE_MS)
+    pendingDraftRef.current = { tabId, timeoutId, value, save: saveDraft }
   }
 
   function handleModeChange(tabId: string, mode: Tab['mode']) {
@@ -164,35 +245,59 @@ export function App() {
   async function handleSave(tabId: string) {
     const tab = tabs.find((t) => t.id === tabId)
     if (!tab) return
+    // A pending debounced draft write (see handleChange) must not still be
+    // sitting in a timer when this save starts — if it fired *after* the
+    // success branch below calls clearDraft(), it would silently resurrect a
+    // stale draft in localStorage for a file that was just successfully
+    // saved. Flushing synchronously first guarantees clearDraft() genuinely
+    // has the last word.
+    if (pendingDraftRef.current?.tabId === tabId) {
+      flushPendingDraft()
+    }
     const contentAtSaveTime = tab.content
-    const res = await putFile(tab, false)
-    if (res.ok) {
-      const data = await res.json()
-      // If content changed during the save, this is a legitimate race: only
-      // the mtimeMs is safe to adopt from the response. Marking dirty:false
-      // or clearing the draft here would falsely report the newer,
-      // still-unsaved edits as saved and delete their only recovery copy.
-      const unchanged = contentUnchangedSince(tabId, contentAtSaveTime)
-      setTabs((prev) =>
-        prev.map((t) =>
-          t.id === tabId
-            ? unchanged
-              ? { ...t, mtimeMs: data.mtimeMs, dirty: false }
-              : { ...t, mtimeMs: data.mtimeMs }
-            : t
+    try {
+      const res = await putFile(tab, false)
+      if (res.ok) {
+        const data = await res.json()
+        // If content changed during the save, this is a legitimate race: only
+        // the mtimeMs is safe to adopt from the response. Marking dirty:false
+        // or clearing the draft here would falsely report the newer,
+        // still-unsaved edits as saved and delete their only recovery copy.
+        const unchanged = contentUnchangedSince(tabId, contentAtSaveTime)
+        setTabs((prev) =>
+          prev.map((t) =>
+            t.id === tabId
+              ? unchanged
+                ? { ...t, mtimeMs: data.mtimeMs, dirty: false }
+                : { ...t, mtimeMs: data.mtimeMs }
+              : t
+          )
         )
-      )
-      if (unchanged) {
-        clearDraft()
+        if (unchanged) {
+          clearDraft()
+        }
+        setSaveError(null)
+        return
       }
-      return
+      if (res.status === 409) {
+        const data = await res.json()
+        setConflict({ tabId, currentContent: data.currentContent, currentMtimeMs: data.currentMtimeMs })
+        setSaveError(null)
+        return
+      }
+      console.error('Failed to save file', res.status)
+      setSaveError({ tabId, message: t('app.saveError', 'Failed to save the file. Your edits are kept.') })
+    } catch (err) {
+      // Covers a dropped connection, a 401 after --rotate-token invalidates
+      // the cached token, a 500, and a non-JSON error body making res.json()
+      // itself throw (including for the 409 branch above) — anything that
+      // would otherwise be an unhandled promise rejection with no user
+      // feedback beyond a console.error. Draft/dirty state is left exactly as
+      // it was: the only place either is cleared is the `unchanged` branch
+      // above, which never runs when this catch fires.
+      console.error('Failed to save file', err)
+      setSaveError({ tabId, message: t('app.saveError', 'Failed to save the file. Your edits are kept.') })
     }
-    if (res.status === 409) {
-      const data = await res.json()
-      setConflict({ tabId, currentContent: data.currentContent, currentMtimeMs: data.currentMtimeMs })
-      return
-    }
-    console.error('Failed to save file', res.status)
   }
 
   async function handleKeepMine() {
@@ -405,6 +510,11 @@ export function App() {
                     allowHtmlScripts={false}
                   />
                 </div>
+                {saveError && saveError.tabId === activeTab.id && (
+                  <div data-testid="save-error" role="alert" style={{ padding: '4px 12px', color: '#b00020' }}>
+                    {saveError.message}
+                  </div>
+                )}
                 {conflict && conflict.tabId === activeTab.id && (
                   <ConflictDialog
                     currentContent={conflict.currentContent}
