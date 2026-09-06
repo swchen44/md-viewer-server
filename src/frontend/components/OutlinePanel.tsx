@@ -53,6 +53,7 @@ export function OutlinePanel({ activeTab, onJumpToHeading }: OutlinePanelProps) 
           return
         }
         setHeadings(data.headings)
+        setLoadError(false)
       })
       .catch(() => {
         if (!cancelled) {

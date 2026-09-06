@@ -96,4 +96,26 @@ describe('OutlinePanel', () => {
     await waitFor(() => expect(screen.getByText('Other')).toBeInTheDocument())
     expect(onJump).not.toHaveBeenCalled()
   })
+
+  it('clears a prior error state once a retry for the same tab succeeds', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ errorCode: 'FILE_NOT_FOUND' }), { status: 404 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ headings: [{ level: 1, text: 'Intro', line: 1 }] }))
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { rerender } = render(
+      <OutlinePanel activeTab={{ rootId: 0, relPath: 'a.md' }} onJumpToHeading={() => {}} />
+    )
+    await waitFor(() => expect(screen.getByText(/failed to load outline/i)).toBeInTheDocument())
+
+    // Same logical tab, new object reference (mirrors App.tsx creating a fresh
+    // activeTab literal on every render) — this re-triggers the fetch effect.
+    rerender(<OutlinePanel activeTab={{ rootId: 0, relPath: 'a.md' }} onJumpToHeading={() => {}} />)
+
+    await waitFor(() => expect(screen.getByText('Intro')).toBeInTheDocument())
+    expect(screen.queryByText(/failed to load outline/i)).not.toBeInTheDocument()
+  })
 })
