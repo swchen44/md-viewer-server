@@ -37,10 +37,21 @@ export class OutlineRegexTimeoutError extends Error {
 
 const DEFAULT_TIMEOUT_MS = 2000
 
+// Callers (OutlinePanel's effect) need a way to give up on an in-flight
+// match early — e.g. the query changes again before the previous match
+// resolves, or the component unmounts — without waiting out the full
+// timeoutMs. An AbortSignal mirrors this codebase's existing idiom for
+// cancellable async work (see src/server/api/plantuml.js and
+// src/server/doctor.js, both of which pass AbortSignal.timeout(...) to
+// fetch); the caller can pass any AbortSignal, including one from an
+// AbortController it aborts itself in an effect cleanup.
 export function runOutlineRegexMatch(
   pattern: string,
   texts: string[],
-  { timeoutMs = DEFAULT_TIMEOUT_MS }: { timeoutMs?: number } = {}
+  {
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    signal,
+  }: { timeoutMs?: number; signal?: AbortSignal } = {}
 ): Promise<number[]> {
   return new Promise((resolve, reject) => {
     let settled = false
@@ -48,32 +59,49 @@ export function runOutlineRegexMatch(
       type: 'module',
     })
 
-    const timer = setTimeout(() => {
+    const cleanup = () => {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', onAbort)
+    }
+
+    const settle = (fn: () => void) => {
       if (settled) return
       settled = true
+      cleanup()
       worker.terminate()
-      reject(new OutlineRegexTimeoutError(pattern))
+      fn()
+    }
+
+    function onAbort() {
+      settle(() => reject(signal?.reason ?? new DOMException('Aborted', 'AbortError')))
+    }
+
+    if (signal) {
+      if (signal.aborted) {
+        worker.terminate()
+        reject(signal.reason ?? new DOMException('Aborted', 'AbortError'))
+        return
+      }
+      signal.addEventListener('abort', onAbort)
+    }
+
+    const timer = setTimeout(() => {
+      settle(() => reject(new OutlineRegexTimeoutError(pattern)))
     }, timeoutMs)
 
     worker.onmessage = (event) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      worker.terminate()
       const msg = event.data as OutlineRegexMatchResult
-      if (msg.ok) {
-        resolve(msg.matchedIndexes)
-      } else {
-        reject(new Error(msg.error))
-      }
+      settle(() => {
+        if (msg.ok) {
+          resolve(msg.matchedIndexes)
+        } else {
+          reject(new Error(msg.error))
+        }
+      })
     }
 
     worker.onerror = (err) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      worker.terminate()
-      reject(err instanceof Error ? err : new Error(String(err)))
+      settle(() => reject(err instanceof Error ? err : new Error(String(err))))
     }
 
     worker.postMessage({ pattern, texts })

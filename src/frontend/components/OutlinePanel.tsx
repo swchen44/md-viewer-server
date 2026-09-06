@@ -108,9 +108,17 @@ export function OutlinePanel({ activeTab, onJumpToHeading, headingFilter }: Outl
     if (!headingFilter || !headingFilter.regex || !headingFilter.query) return
     const query = headingFilter.query
     let cancelled = false
+    // A previous in-flight match's Worker must not be left running once this
+    // effect re-runs (query keeps changing while typing, or the tab
+    // switches) or unmounts — otherwise each abandoned Worker keeps burning
+    // CPU for its full timeoutMs even though its result will never be used.
+    // Aborting via the controller (rather than only setting `cancelled`)
+    // makes runOutlineRegexMatch terminate the Worker immediately.
+    const controller = new AbortController()
     runOutlineRegexMatch(
       query,
-      headings.map((h) => h.text)
+      headings.map((h) => h.text),
+      { signal: controller.signal }
     )
       .then((matchedIndexes) => {
         if (cancelled) return
@@ -118,13 +126,14 @@ export function OutlinePanel({ activeTab, onJumpToHeading, headingFilter }: Outl
         setRegexMatchResult({ query, headings, matches: headings.filter((_, i) => matched.has(i)) })
       })
       .catch(() => {
-        // Invalid pattern, worker error, or a timed-out pathological pattern
-        // — in every case, show no matches rather than crash the panel or
-        // leave stale results on screen indefinitely.
+        // Invalid pattern, worker error, cancellation, or a timed-out
+        // pathological pattern — in every case, show no matches rather than
+        // crash the panel or leave stale results on screen indefinitely.
         if (!cancelled) setRegexMatchResult({ query, headings, matches: [] })
       })
     return () => {
       cancelled = true
+      controller.abort()
     }
   }, [headingFilter, headings])
 

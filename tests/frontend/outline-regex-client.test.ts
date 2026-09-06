@@ -58,6 +58,37 @@ describe('runOutlineRegexMatch', () => {
     expect(matched).toEqual([1])
   })
 
+  it('terminates the worker immediately when the caller aborts before it resolves', async () => {
+    // Simulates OutlinePanel's effect cleanup: the regex query changes again
+    // (or the component unmounts) before the in-flight match resolves. The
+    // worker must be terminated right away — well before the full
+    // timeoutMs elapses — not merely left to time out on its own schedule.
+    vi.useFakeTimers()
+    const stuckWorkerInstances: StuckWorker[] = []
+    class TrackedStuckWorker extends StuckWorker {
+      constructor() {
+        super()
+        stuckWorkerInstances.push(this)
+      }
+    }
+    vi.stubGlobal('Worker', TrackedStuckWorker)
+
+    const controller = new AbortController()
+    const resultPromise = runOutlineRegexMatch('slow-pattern', ['a'.repeat(40)], {
+      timeoutMs: 2000,
+      signal: controller.signal,
+    })
+    resultPromise.catch(() => {})
+
+    expect(stuckWorkerInstances[0]?.terminated).toBe(false)
+    controller.abort()
+
+    // No time advanced at all: termination must happen synchronously with
+    // the abort call, not merely once the (much later) timeout fires.
+    expect(stuckWorkerInstances[0]?.terminated).toBe(true)
+    await expect(resultPromise).rejects.toBeTruthy()
+  })
+
   it('rejects (does not hang) within the configured timeout when the worker never responds', async () => {
     vi.useFakeTimers()
     const stuckWorkerInstances: StuckWorker[] = []
