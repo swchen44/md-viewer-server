@@ -161,6 +161,43 @@ describe('App search wiring', () => {
     await vi.waitFor(() => expect(screen.getByTestId('tab-bar')).toHaveTextContent('b.md'))
   })
 
+  it('sends each open tab as its own openPaths param, not comma-joined into one value', async () => {
+    vi.useFakeTimers()
+    const fetchMock = stubRoutedFetch([
+      { match: '/api/roots', response: [{ id: 0, name: 'proj' }] },
+      {
+        match: '/api/files',
+        response: {
+          files: [
+            { relPath: 'notes/a,b.md', size: 1, mtimeMs: 1 },
+            { relPath: 'other.md', size: 1, mtimeMs: 1 },
+          ],
+        },
+      },
+      { match: '/api/search', response: { fileMatches: [], contentMatches: [] } },
+    ])
+    render(<App />)
+    await vi.waitFor(() => expect(screen.getByText('notes/a,b.md')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('notes/a,b.md'))
+    fireEvent.click(screen.getByText('other.md'))
+
+    fireEvent.click(screen.getByRole('button', { name: /open tabs/i }))
+    fireEvent.change(screen.getByPlaceholderText(/search/i), { target: { value: 'x' } })
+    await vi.advanceTimersByTimeAsync(300)
+
+    await vi.waitFor(() =>
+      expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/search'))).toBe(true)
+    )
+    const searchCall = fetchMock.mock.calls.find(([url]) => String(url).includes('/api/search'))
+    const requestUrl = new URL(String(searchCall![0]), 'http://localhost')
+    // Comma-joining both relPaths into one value ('notes/a,b.md,other.md')
+    // would be ambiguous — the backend can't tell where one relPath ends and
+    // the next begins when a relPath itself legally contains a comma.
+    // Repeated `openPaths` params (what URLSearchParams.append produces) keep
+    // each relPath intact and unambiguous as its own value.
+    expect(requestUrl.searchParams.getAll('openPaths').sort()).toEqual(['notes/a,b.md', 'other.md'])
+  })
+
   it('clearing the search query restores the file tree', async () => {
     vi.useFakeTimers()
     stubRoutedFetch([

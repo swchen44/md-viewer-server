@@ -58,6 +58,26 @@ describe('search and outline API', () => {
     expect(paths).not.toContain('plan.md')
   })
 
+  it('does not corrupt an openPaths value containing a literal comma', async () => {
+    fs.writeFileSync(path.join(rootDir, 'a,b.md'), '# A,B\n\ncomma content here')
+    const res = await request(buildApp()).get(
+      `/api/search?root=0&q=comma&target=content&scope=open&openPaths=${encodeURIComponent('a,b.md')}`
+    )
+    expect(res.status).toBe(200)
+    const paths = res.body.contentMatches.map((m) => m.relPath)
+    expect(paths).toContain('a,b.md')
+  })
+
+  it('handles a comma-containing relPath among repeated openPaths query params', async () => {
+    fs.writeFileSync(path.join(rootDir, 'a,b.md'), '# A,B\n\ncomma content here')
+    const res = await request(buildApp()).get(
+      `/api/search?root=0&q=e&target=content&scope=open&openPaths=${encodeURIComponent('a,b.md')}&openPaths=readme.md`
+    )
+    expect(res.status).toBe(200)
+    const paths = res.body.contentMatches.map((m) => m.relPath).sort()
+    expect(paths).toEqual(['a,b.md', 'readme.md'])
+  })
+
   it('returns empty results for scope=open when openPaths is not provided', async () => {
     const res = await request(buildApp()).get(
       '/api/search?root=0&q=e&target=both&scope=open'

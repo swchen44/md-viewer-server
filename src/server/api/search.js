@@ -32,7 +32,15 @@ export function createSearchRouter(roots, extensions) {
 
     let files = listFiles(root.path, extensions)
     if (scope === 'open') {
-      const openSet = new Set(openPaths ? String(openPaths).split(',') : [])
+      // openPaths arrives as `undefined` (no open tabs), a single string (one
+      // open tab), or an array (multiple open tabs) depending on how many
+      // `openPaths=...` query params the client sent — Express's default
+      // ('extended'/qs) query parser turns repeated keys into an array
+      // automatically. Repeated params (rather than one comma-joined value)
+      // is deliberate: POSIX filenames can legally contain a literal comma,
+      // which a join/split round-trip would silently corrupt.
+      const openList = Array.isArray(openPaths) ? openPaths : openPaths ? [openPaths] : []
+      const openSet = new Set(openList.map((p) => String(p)))
       files = files.filter((f) => openSet.has(f.relPath))
     }
 

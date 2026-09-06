@@ -115,11 +115,15 @@ export function App() {
           regex: String(options.regex),
         })
         if (options.scope === 'open') {
-          const openPaths = tabs
+          // POSIX filenames can legally contain a literal comma, so joining
+          // relPaths into one comma-separated value (and having the backend
+          // split on ',') is ambiguous/corrupting. Send each open tab as its
+          // own repeated `openPaths` param instead — URLSearchParams.append
+          // handles this natively, and Express's default query parser turns
+          // repeated keys back into an array on the backend.
+          tabs
             .filter((t) => t.rootId === root.id)
-            .map((t) => t.relPath)
-            .join(',')
-          params.set('openPaths', openPaths)
+            .forEach((t) => params.append('openPaths', t.relPath))
         }
 
         try {
