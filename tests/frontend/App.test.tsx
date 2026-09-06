@@ -1,8 +1,18 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { App } from '../../src/frontend/App.js'
 
+function stubRootsFetch() {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue(new Response(JSON.stringify([])))
+  )
+}
+
 describe('App layout', () => {
+  beforeEach(() => stubRootsFetch())
+  afterEach(() => vi.unstubAllGlobals())
+
   it('renders the top bar, sidebar, and an empty tab bar', () => {
     render(<App />)
     expect(screen.getByTestId('top-bar')).toBeInTheDocument()
