@@ -212,7 +212,7 @@ createRoot(document.getElementById('root')!).render(
 }
 ```
 
-（保留既有的 `test:unit`/`test:integration`/`lint`/`build` scripts 不變；`build` 之後在 Task 8 會擴充成同時 build 前後端。）
+（保留既有的 `test:unit`/`test:integration`/`lint`/`build` scripts 不變；`build` 之後在 Task 9 會擴充成同時 build 前後端。）
 
 - [ ] **Step 4: 建立 Vitest 前端測試設定**
 
@@ -1599,7 +1599,379 @@ EOF
 
 ---
 
-### Task 8: 整合進發佈流程（Express 靜態檔案服務 + esbuild bundle）
+### Task 8: 搜尋歷史記錄（自動完成 + 可清除 + 可設定筆數上限）
+
+> 這個 task 是在 Task 7 開發過程中，使用者追加的需求：搜尋框要記住最近搜尋過的字串，輸入時即時比對顯示建議選單，可用鍵盤（↑/↓ 選、Enter 確定、Tab 補全）操作，歷史筆數上限可調整（預設 10 筆），可一鍵清除。**必須等 Task 7 的 commit 完成、`SearchBar.tsx` 定案後才開始**，避免與 Task 7 對同一檔案的變更衝突。
+
+**Files:**
+- Create: `src/frontend/hooks/useSearchHistory.ts`
+- Modify: `src/frontend/components/SearchBar.tsx`（讀取 Task 7 落地後的實際版本再整合，不要對照本節之外任何假設的舊版介面）
+- Test: `tests/frontend/useSearchHistory.test.ts`
+- Test: 擴充 `tests/frontend/SearchBar.test.tsx`
+
+**Interfaces:**
+- `useSearchHistory(mode: 'files' | 'outline')` → `{entries: string[], maxSize: number, addEntry: (query: string) => void, clearHistory: () => void, setMaxSize: (n: number) => void}`。存在 `localStorage['mvs-search-history:<mode>']`，格式 `{maxSize: number, entries: string[]}`；`files` 模式與 `outline` 模式各自獨立一份歷史（語意不同，不應該混在一起）
+- `SearchBar` 的對外 props（`{mode, onSearch}`）**不變**——歷史記錄是 `SearchBar` 內部行為，呼叫端（`App.tsx`）不需要知道歷史記錄的存在，也不需要修改
+
+**行為規格：**
+- `addEntry`：trim 後為空字串不記錄；已存在的字串會移到最前面而非重複一筆（去重＋提升到最新）；超過 `maxSize` 的舊筆數自動捨棄
+- `setMaxSize`：改變上限後，若目前筆數超過新上限，立刻截斷多餘的舊筆數
+- `clearHistory`：清空 `entries`，`maxSize` 設定值保留
+- **何時寫入歷史**：不是每次 debounce 觸發 `onSearch` 就寫入（那樣打字過程中的每個中間字串都會被記錄，不是使用者的本意）——只有使用者「確定」一次搜尋時才寫入：按 `Enter`、或用滑鼠點選/鍵盤選取一筆建議並確定。既有的 300ms debounce 即時搜尋行為（Task 7 已實作）維持不變，兩者並存
+- **建議選單**：輸入框有焦點時，若目前輸入字串為空，顯示全部歷史（最新在前）；若有輸入字串，只顯示歷史中「不分大小寫、包含該子字串」的項目。選單為空（沒有比對到任何歷史，或歷史本身是空的）時完全不渲染選單容器
+- **鍵盤操作**：`ArrowDown`/`ArrowUp` 在建議選單中移動反白項目（含邊界處理，不循環也可以，不循環比循環更常見）；`Enter`：若有反白項目則採用該項目的文字（同時視為一次確定搜尋，寫入歷史、立即呼叫 `onSearch` 不等 debounce）；若無反白項目則直接把目前輸入框內容視為確定搜尋（同樣寫入歷史、立即呼叫 `onSearch`）；`Escape`：關閉選單，不改變輸入框內容；`Tab`：把輸入框內容**自動補全**成反白項目（無反白時用清單第一項）的完整文字，**不**觸發搜尋、**不**寫入歷史、**不**把焦點移出輸入框（`event.preventDefault()`），維持選單開啟讓使用者可以再按 Enter 確定
+- **清除與筆數設定 UI**：`SearchBar` 在搜尋輸入框旁固定顯示一個「清除歷史」按鈕（沒有歷史時 disabled）與一個筆數上限的 `<input type="number" min={1} max={100}>`（受控於 `maxSize`，變更時呼叫 `setMaxSize`）——不需要額外的設定選單串接，這個小功能整個在 `SearchBar` 內自我完備
+
+- [ ] **Step 1: 寫失敗測試（`useSearchHistory`）**
+
+`tests/frontend/useSearchHistory.test.ts`:
+
+```ts
+import { describe, it, expect, beforeEach } from 'vitest'
+import { renderHook, act } from '@testing-library/react'
+import { useSearchHistory } from '../../src/frontend/hooks/useSearchHistory.js'
+
+describe('useSearchHistory', () => {
+  beforeEach(() => localStorage.clear())
+
+  it('defaults to an empty history with maxSize 10', () => {
+    const { result } = renderHook(() => useSearchHistory('files'))
+    expect(result.current.entries).toEqual([])
+    expect(result.current.maxSize).toBe(10)
+  })
+
+  it('addEntry adds a query, most recent first', () => {
+    const { result } = renderHook(() => useSearchHistory('files'))
+    act(() => result.current.addEntry('foo'))
+    act(() => result.current.addEntry('bar'))
+    expect(result.current.entries).toEqual(['bar', 'foo'])
+  })
+
+  it('addEntry ignores an empty or whitespace-only query', () => {
+    const { result } = renderHook(() => useSearchHistory('files'))
+    act(() => result.current.addEntry('   '))
+    expect(result.current.entries).toEqual([])
+  })
+
+  it('addEntry de-dupes by moving an existing entry to the front', () => {
+    const { result } = renderHook(() => useSearchHistory('files'))
+    act(() => result.current.addEntry('foo'))
+    act(() => result.current.addEntry('bar'))
+    act(() => result.current.addEntry('foo'))
+    expect(result.current.entries).toEqual(['foo', 'bar'])
+  })
+
+  it('addEntry truncates to maxSize', () => {
+    const { result } = renderHook(() => useSearchHistory('files'))
+    act(() => result.current.setMaxSize(2))
+    act(() => result.current.addEntry('a'))
+    act(() => result.current.addEntry('b'))
+    act(() => result.current.addEntry('c'))
+    expect(result.current.entries).toEqual(['c', 'b'])
+  })
+
+  it('clearHistory empties entries but keeps maxSize', () => {
+    const { result } = renderHook(() => useSearchHistory('files'))
+    act(() => result.current.setMaxSize(5))
+    act(() => result.current.addEntry('foo'))
+    act(() => result.current.clearHistory())
+    expect(result.current.entries).toEqual([])
+    expect(result.current.maxSize).toBe(5)
+  })
+
+  it('setMaxSize truncates existing entries down to the new smaller limit', () => {
+    const { result } = renderHook(() => useSearchHistory('files'))
+    act(() => result.current.addEntry('a'))
+    act(() => result.current.addEntry('b'))
+    act(() => result.current.addEntry('c'))
+    act(() => result.current.setMaxSize(1))
+    expect(result.current.entries).toEqual(['c'])
+  })
+
+  it('keeps files-mode and outline-mode history independent', () => {
+    const files = renderHook(() => useSearchHistory('files'))
+    const outline = renderHook(() => useSearchHistory('outline'))
+    act(() => files.result.current.addEntry('file query'))
+    expect(outline.result.current.entries).toEqual([])
+  })
+
+  it('persists across hook instances (survives a reload)', () => {
+    const first = renderHook(() => useSearchHistory('files'))
+    act(() => first.result.current.addEntry('foo'))
+    const second = renderHook(() => useSearchHistory('files'))
+    expect(second.result.current.entries).toEqual(['foo'])
+  })
+})
+```
+
+- [ ] **Step 2: 執行測試確認失敗**
+
+Run: `npm run test:frontend -- useSearchHistory.test.ts`
+Expected: FAIL — module not found
+
+- [ ] **Step 3: 實作 `useSearchHistory`**
+
+`src/frontend/hooks/useSearchHistory.ts`:
+
+```ts
+import { useCallback, useState } from 'react'
+
+interface StoredHistory {
+  maxSize: number
+  entries: string[]
+}
+
+const DEFAULT_MAX_SIZE = 10
+
+function storageKey(mode: string): string {
+  return `mvs-search-history:${mode}`
+}
+
+function loadHistory(mode: string): StoredHistory {
+  try {
+    const raw = localStorage.getItem(storageKey(mode))
+    if (!raw) return { maxSize: DEFAULT_MAX_SIZE, entries: [] }
+    const parsed = JSON.parse(raw)
+    return {
+      maxSize: typeof parsed.maxSize === 'number' && parsed.maxSize > 0 ? parsed.maxSize : DEFAULT_MAX_SIZE,
+      entries: Array.isArray(parsed.entries) ? parsed.entries : [],
+    }
+  } catch {
+    return { maxSize: DEFAULT_MAX_SIZE, entries: [] }
+  }
+}
+
+function persist(mode: string, history: StoredHistory) {
+  localStorage.setItem(storageKey(mode), JSON.stringify(history))
+}
+
+export function useSearchHistory(mode: string) {
+  const [history, setHistory] = useState<StoredHistory>(() => loadHistory(mode))
+
+  const addEntry = useCallback(
+    (query: string) => {
+      const trimmed = query.trim()
+      if (!trimmed) return
+      setHistory((prev) => {
+        const withoutDuplicate = prev.entries.filter((e) => e !== trimmed)
+        const entries = [trimmed, ...withoutDuplicate].slice(0, prev.maxSize)
+        const next = { ...prev, entries }
+        persist(mode, next)
+        return next
+      })
+    },
+    [mode]
+  )
+
+  const clearHistory = useCallback(() => {
+    setHistory((prev) => {
+      const next = { ...prev, entries: [] }
+      persist(mode, next)
+      return next
+    })
+  }, [mode])
+
+  const setMaxSize = useCallback(
+    (maxSize: number) => {
+      setHistory((prev) => {
+        const next = { maxSize, entries: prev.entries.slice(0, maxSize) }
+        persist(mode, next)
+        return next
+      })
+    },
+    [mode]
+  )
+
+  return { entries: history.entries, maxSize: history.maxSize, addEntry, clearHistory, setMaxSize }
+}
+```
+
+- [ ] **Step 4: 執行測試確認通過**
+
+Run: `npm run test:frontend -- useSearchHistory.test.ts`
+Expected: PASS（8 個測試）
+
+- [ ] **Step 5: 讀取 Task 7 落地後的 `SearchBar.tsx` 實際內容**
+
+不要假設任何特定的既有程式碼結構——先讀檔案，理解目前的 `query`/`target`/`scope`/`regex`/debounce 邏輯，再決定怎麼疊加歷史記錄功能，盡量以最小改動整合，不重寫既有邏輯。
+
+- [ ] **Step 6: 寫失敗測試（`SearchBar` 新行為，擴充既有測試檔）**
+
+在 `tests/frontend/SearchBar.test.tsx` 加入（依既有測試檔的 import/mock 慣例調整）：
+
+```tsx
+it('shows matching history suggestions as the user types', async () => {
+  localStorage.setItem(
+    'mvs-search-history:files',
+    JSON.stringify({ maxSize: 10, entries: ['hello world', 'goodbye', 'help'] })
+  )
+  render(<SearchBar mode="files" onSearch={() => {}} />)
+  fireEvent.change(screen.getByPlaceholderText(/search/i), { target: { value: 'hel' } })
+  expect(screen.getByText('hello world')).toBeInTheDocument()
+  expect(screen.getByText('help')).toBeInTheDocument()
+  expect(screen.queryByText('goodbye')).not.toBeInTheDocument()
+})
+
+it('shows all history when the input is empty and focused', () => {
+  localStorage.setItem(
+    'mvs-search-history:files',
+    JSON.stringify({ maxSize: 10, entries: ['a', 'b'] })
+  )
+  render(<SearchBar mode="files" onSearch={() => {}} />)
+  fireEvent.focus(screen.getByPlaceholderText(/search/i))
+  expect(screen.getByText('a')).toBeInTheDocument()
+  expect(screen.getByText('b')).toBeInTheDocument()
+})
+
+it('pressing Enter commits the query immediately, bypassing debounce, and records history', () => {
+  vi.useFakeTimers()
+  const onSearch = vi.fn()
+  render(<SearchBar mode="files" onSearch={onSearch} />)
+  const input = screen.getByPlaceholderText(/search/i)
+  fireEvent.change(input, { target: { value: 'my query' } })
+  fireEvent.keyDown(input, { key: 'Enter' })
+  expect(onSearch).toHaveBeenCalledWith('my query', expect.anything())
+  vi.useRealTimers()
+
+  // history persisted for the next mount
+  const { unmount } = render(<SearchBar mode="files" onSearch={() => {}} />)
+  fireEvent.focus(screen.getByPlaceholderText(/search/i))
+  expect(screen.getByText('my query')).toBeInTheDocument()
+  unmount()
+})
+
+it('ArrowDown highlights a suggestion and Enter selects it', () => {
+  localStorage.setItem(
+    'mvs-search-history:files',
+    JSON.stringify({ maxSize: 10, entries: ['alpha', 'beta'] })
+  )
+  const onSearch = vi.fn()
+  render(<SearchBar mode="files" onSearch={onSearch} />)
+  const input = screen.getByPlaceholderText(/search/i)
+  fireEvent.focus(input)
+  fireEvent.keyDown(input, { key: 'ArrowDown' })
+  fireEvent.keyDown(input, { key: 'Enter' })
+  expect(input).toHaveValue('alpha')
+  expect(onSearch).toHaveBeenCalledWith('alpha', expect.anything())
+})
+
+it('Tab completes the input to the highlighted suggestion without submitting or moving focus', () => {
+  localStorage.setItem(
+    'mvs-search-history:files',
+    JSON.stringify({ maxSize: 10, entries: ['alpha', 'beta'] })
+  )
+  const onSearch = vi.fn()
+  render(<SearchBar mode="files" onSearch={onSearch} />)
+  const input = screen.getByPlaceholderText(/search/i)
+  fireEvent.focus(input)
+  fireEvent.keyDown(input, { key: 'ArrowDown' })
+  const tabEvent = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+  input.dispatchEvent(tabEvent)
+  expect(input).toHaveValue('alpha')
+  expect(tabEvent.defaultPrevented).toBe(true)
+  expect(onSearch).not.toHaveBeenCalled()
+})
+
+it('clicking "clear history" empties the suggestion list', () => {
+  localStorage.setItem(
+    'mvs-search-history:files',
+    JSON.stringify({ maxSize: 10, entries: ['alpha'] })
+  )
+  render(<SearchBar mode="files" onSearch={() => {}} />)
+  fireEvent.click(screen.getByRole('button', { name: /clear history/i }))
+  fireEvent.focus(screen.getByPlaceholderText(/search/i))
+  expect(screen.queryByText('alpha')).not.toBeInTheDocument()
+})
+
+it('changing the max-size input updates the stored limit', () => {
+  render(<SearchBar mode="files" onSearch={() => {}} />)
+  const maxSizeInput = screen.getByLabelText(/history size|max.*history/i)
+  fireEvent.change(maxSizeInput, { target: { value: '3' } })
+  expect(JSON.parse(localStorage.getItem('mvs-search-history:files') ?? '{}').maxSize).toBe(3)
+})
+
+it('keeps files-mode and outline-mode search history separate', () => {
+  localStorage.setItem(
+    'mvs-search-history:files',
+    JSON.stringify({ maxSize: 10, entries: ['files query'] })
+  )
+  render(<SearchBar mode="outline" onSearch={() => {}} />)
+  fireEvent.focus(screen.getByPlaceholderText(/search/i))
+  expect(screen.queryByText('files query')).not.toBeInTheDocument()
+})
+```
+
+（實作者請對照目前 `SearchBar.tsx` 實際的測試撰寫慣例調整這些案例的細節——例如 `onSearch` 的 `options` 參數形狀依 Task 7 落地後的真實型別而定，這裡用 `expect.anything()` 只是為了不對那個形狀做多餘假設。）
+
+- [ ] **Step 7: 執行測試確認失敗**
+
+Run: `npm run test:frontend -- SearchBar.test.tsx`
+Expected: FAIL — 新案例找不到歷史/自動完成相關行為
+
+- [ ] **Step 8: 實作**
+
+在 `SearchBar.tsx` 內：
+1. 呼叫 `const { entries, maxSize, addEntry, clearHistory, setMaxSize } = useSearchHistory(mode)`
+2. 新增 `isFocused`（或用 `suggestionsOpen`）與 `highlightedIndex` state
+3. 計算 `suggestions = entries.filter((e) => e.toLowerCase().includes(query.toLowerCase()))`（`query` 為空字串時回傳整個 `entries`）
+4. `onFocus` 開啟建議選單；`onBlur` 延遲關閉（避免點擊選單項目時 blur 搶先觸發，可以用 `onMouseDown` 在選單項目上呼叫 `event.preventDefault()`，或用一個小的 `setTimeout`）
+5. `onKeyDown` 處理 `ArrowDown`/`ArrowUp`/`Enter`/`Escape`/`Tab` 如上述行為規格
+6. 「確定搜尋」的共用邏輯（Enter 或點選建議都會用到）：清掉既有 debounce 計時器、直接呼叫 `onSearch(finalQuery, options)`、呼叫 `addEntry(finalQuery)`、關閉選單
+7. 建議選單容器只在 `suggestions.length > 0` 且開啟時渲染，每個選項用 `onMouseDown`（見上）+ `onClick` 觸發選取
+8. 在既有搜尋控制項旁加入「清除歷史」按鈕（`disabled={entries.length === 0}`，`onClick={clearHistory}`）與筆數上限 `<input type="number" min={1} max={100} value={maxSize} onChange={(e) => setMaxSize(Number(e.target.value))} aria-label={t('search.historyMaxSizeLabel')} />`
+9. 在 5 個 `src/frontend/i18n/locales/*.json` 加入 `search.clearHistory`（"Clear history"）與 `search.historyMaxSizeLabel`（"History size"）鍵，其餘語言對應翻譯，遵循既有巢狀結構慣例
+
+- [ ] **Step 9: 執行測試確認通過**
+
+Run: `npm run test:frontend`
+Expected: 全部通過
+
+- [ ] **Step 10: 完整驗證**
+
+Run: `npm run lint && npm run typecheck:frontend && npm run test:frontend`
+Expected: 全部通過
+
+- [ ] **Step 11: Codex code review**
+
+Run: `/codex:review --base <Task-7-commit-sha>`（依 `CLAUDE.md` 最新規則，不 dispatch Claude reviewer subagent）。修正任何 Critical/Important 發現。
+
+- [ ] **Step 12: Commit — 這是一個 UI 段落**
+
+```bash
+git add src/frontend/hooks/useSearchHistory.ts src/frontend/components/SearchBar.tsx src/frontend/i18n/locales/*.json tests/frontend/useSearchHistory.test.ts tests/frontend/SearchBar.test.tsx
+git commit -m "$(cat <<'EOF'
+Add search history with autocomplete to SearchBar
+
+Why: User-requested mid-implementation addition (after Task 7 landed):
+the search box should remember recent queries, show live-matching
+suggestions as the user types, support keyboard selection and
+Tab-to-complete (a pattern common across browsers/IDEs/shells), and
+let the configurable history size be adjusted or cleared — without
+depending on the not-yet-built settings menu (Plan 7).
+What: useSearchHistory persists a per-mode ({files, outline} kept
+independent) {maxSize, entries} blob to localStorage, with add
+(dedupe + move-to-front + truncate), clear, and setMaxSize (which
+also truncates on shrink). SearchBar's existing debounced live-search
+onSearch behavior (Task 7) is unchanged; history is recorded only on
+an explicit commit (Enter, or selecting a suggestion) so intermediate
+keystrokes during live search don't pollute the history. Tab
+autocompletes the input to the highlighted suggestion without
+submitting or losing focus. A "clear history" button and a numeric
+max-size input ship inline in SearchBar itself, self-contained.
+How: [UI CHECKPOINT] UI-facing segment per CLAUDE.md's checkpoint
+rule. SearchBar's external prop contract ({mode, onSearch}) is
+unchanged, so no App.tsx/FileTreePanel/OutlinePanel changes were
+needed for this task.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01KCkr3UUhi36YHAEiAAhp5L
+EOF
+)"
+```
+
+---
+
+### Task 9: 整合進發佈流程（Express 靜態檔案服務 + esbuild bundle）
 
 **Files:**
 - Modify: `src/server/app.js` — 新增 `express.static` 服務前端 dist，含 SPA fallback
@@ -1751,3 +2123,4 @@ EOF
 - [ ] A real spawned daemon serves the frontend at `/`, with token auth flow working end-to-end (URL token → sessionStorage → API calls succeed)
 - [ ] Sidebar correctly shows/hides the root-name layer based on root count
 - [ ] Both sidebar modes (files/outline) and their mode-appropriate search options render and call the correct APIs
+- [ ] Search history persists per mode (files/outline independent), autocompletes via keyboard (arrow keys + Enter + Tab-to-complete), defaults to 10 entries, and can be resized or cleared
