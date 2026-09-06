@@ -30,6 +30,28 @@ describe('GET /api/health', () => {
   })
 })
 
+describe('unmatched /api/* requests', () => {
+  it('returns a JSON 404 instead of falling through to the SPA index.html', async () => {
+    const { app } = buildTestApp()
+    const res = await request(app)
+      .get('/api/this-does-not-exist')
+      .set('X-Auth-Token', '1234')
+    expect(res.status).toBe(404)
+    expect(res.body).toEqual({ errorCode: 'NOT_FOUND' })
+    expect(res.headers['content-type']).toMatch(/json/)
+  })
+
+  it('returns a JSON 404 for a valid /api path called with the wrong method', async () => {
+    const { app } = buildTestApp()
+    // /api/shutdown is only registered as POST — GET should 404, not 200 the SPA shell.
+    const res = await request(app)
+      .get('/api/shutdown')
+      .set('X-Auth-Token', '1234')
+    expect(res.status).toBe(404)
+    expect(res.body).toEqual({ errorCode: 'NOT_FOUND' })
+  })
+})
+
 describe('POST /api/shutdown', () => {
   it('rejects requests without a valid token', async () => {
     const { app, onShutdown } = buildTestApp()

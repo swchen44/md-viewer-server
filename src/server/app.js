@@ -79,6 +79,16 @@ export function createApp({
   // static shell itself must be servable without the token.
   app.use(express.static(FRONTEND_DIST))
   app.get('*', (req, res) => {
+    // A request under /api/* reaching this point matches no real API route
+    // above — either the path doesn't exist or it exists under a different
+    // HTTP method (e.g. GET /api/shutdown, which is POST-only). Either way it
+    // must 404 as JSON rather than silently falling through to the SPA shell,
+    // which would return a misleading 200 index.html to API callers checking
+    // res.ok.
+    if (req.path.startsWith('/api/')) {
+      res.status(404).json({ errorCode: 'NOT_FOUND' })
+      return
+    }
     res.sendFile(path.join(FRONTEND_DIST, 'index.html'))
   })
 
