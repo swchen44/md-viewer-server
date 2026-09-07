@@ -573,6 +573,14 @@ export function App() {
                     onChange={(value) => handleChange(activeTab.id, value)}
                     onSave={() => handleSave(activeTab.id)}
                     allowHtmlScripts={settings?.effective?.allowHtmlScripts ?? false}
+                    // Both fall back to the SAFE posture while settings are
+                    // unknown (still loading, or the fetch failed and
+                    // useSettings deliberately kept settings null): scripts
+                    // off, remote content blocked. For blockRemoteContent that
+                    // means defaulting to `true` — a document must not get to
+                    // phone home during the window where we cannot yet tell
+                    // whether privacy mode is on.
+                    blockRemoteContent={settings?.effective?.blockRemoteContent ?? true}
                   />
                 </div>
                 {saveError && saveError.tabId === activeTab.id && (

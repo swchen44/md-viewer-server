@@ -41,6 +41,7 @@ describe('TabContent', () => {
         onChange={() => {}}
         onSave={() => {}}
         allowHtmlScripts={false}
+        blockRemoteContent={false}
       />
     )
     await waitFor(() => expect(onContentLoaded).toHaveBeenCalledWith('# Hi', 123, 'utf-8'))
@@ -54,6 +55,7 @@ describe('TabContent', () => {
         onChange={() => {}}
         onSave={() => {}}
         allowHtmlScripts={false}
+        blockRemoteContent={false}
       />
     )
     expect(screen.getByTestId('markdown-view')).toBeInTheDocument()
@@ -67,6 +69,7 @@ describe('TabContent', () => {
         onChange={() => {}}
         onSave={() => {}}
         allowHtmlScripts={false}
+        blockRemoteContent={false}
       />
     )
     expect(screen.getByTitle('html-preview')).toBeInTheDocument()
@@ -80,9 +83,65 @@ describe('TabContent', () => {
         onChange={() => {}}
         onSave={() => {}}
         allowHtmlScripts={false}
+        blockRemoteContent={false}
       />
     )
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+  })
+
+  // The setting is enforced in MarkdownView/HtmlView, so what matters here is
+  // that TabContent actually hands it down to whichever view it picks —
+  // without that, the toggle is inert no matter how the views behave.
+  describe('blockRemoteContent reaches the view that renders the document', () => {
+    it('blocks a remote markdown image in view mode', () => {
+      render(
+        <TabContent
+          tab={makeTab({ content: '![cat](https://tracker.example.com/cat.png)', mtimeMs: 1 })}
+          onContentLoaded={() => {}}
+          onChange={() => {}}
+          onSave={() => {}}
+          allowHtmlScripts={false}
+          blockRemoteContent={true}
+        />
+      )
+      expect(screen.queryByRole('img')).not.toBeInTheDocument()
+      expect(screen.getByTestId('blocked-remote-content')).toBeInTheDocument()
+    })
+
+    it('blocks a remote markdown image in the split-view preview', () => {
+      render(
+        <TabContent
+          tab={makeTab({
+            content: '![cat](https://tracker.example.com/cat.png)',
+            mtimeMs: 1,
+            mode: 'split',
+          })}
+          onContentLoaded={() => {}}
+          onChange={() => {}}
+          onSave={() => {}}
+          allowHtmlScripts={false}
+          blockRemoteContent={true}
+        />
+      )
+      expect(screen.queryByRole('img')).not.toBeInTheDocument()
+      expect(screen.getByTestId('blocked-remote-content')).toBeInTheDocument()
+    })
+
+    it('adds the CSP meta to a .html file preview', () => {
+      render(
+        <TabContent
+          tab={makeTab({ relPath: 'a.html', content: '<p>hi</p>', mtimeMs: 1 })}
+          onContentLoaded={() => {}}
+          onChange={() => {}}
+          onSave={() => {}}
+          allowHtmlScripts={false}
+          blockRemoteContent={true}
+        />
+      )
+      expect(screen.getByTitle('html-preview').getAttribute('srcdoc')).toContain(
+        'Content-Security-Policy'
+      )
+    })
   })
 
   it('shows a translated loading message, not a hardcoded English literal', () => {
@@ -96,6 +155,7 @@ describe('TabContent', () => {
         onChange={() => {}}
         onSave={() => {}}
         allowHtmlScripts={false}
+        blockRemoteContent={false}
       />
     )
     expect(screen.getByText(en.tabContent.loading)).toBeInTheDocument()
@@ -116,6 +176,7 @@ describe('TabContent', () => {
         onChange={() => {}}
         onSave={() => {}}
         allowHtmlScripts={false}
+        blockRemoteContent={false}
       />
     )
     await waitFor(() => expect(screen.getByText(/failed to load/i)).toBeInTheDocument())

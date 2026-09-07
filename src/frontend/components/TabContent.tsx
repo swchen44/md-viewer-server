@@ -13,9 +13,17 @@ interface TabContentProps {
   onChange: (value: string) => void
   onSave: () => void
   allowHtmlScripts: boolean
+  blockRemoteContent: boolean
 }
 
-export function TabContent({ tab, onContentLoaded, onChange, onSave, allowHtmlScripts }: TabContentProps) {
+export function TabContent({
+  tab,
+  onContentLoaded,
+  onChange,
+  onSave,
+  allowHtmlScripts,
+  blockRemoteContent,
+}: TabContentProps) {
   const { t } = useTranslation()
   const [loadError, setLoadError] = useState(false)
 
@@ -73,7 +81,13 @@ export function TabContent({ tab, onContentLoaded, onChange, onSave, allowHtmlSc
 
   const isHtml = tab.relPath.endsWith('.html')
   if (isHtml) {
-    return <HtmlView content={tab.content} allowScripts={allowHtmlScripts} />
+    return (
+      <HtmlView
+        content={tab.content}
+        allowScripts={allowHtmlScripts}
+        blockRemoteContent={blockRemoteContent}
+      />
+    )
   }
 
   const effectiveMode = tab.encoding === 'unknown' ? 'view' : tab.mode
@@ -82,7 +96,14 @@ export function TabContent({ tab, onContentLoaded, onChange, onSave, allowHtmlSc
     return <MarkdownEditor value={tab.content} onChange={onChange} onSave={onSave} />
   }
   if (effectiveMode === 'split') {
-    return <SplitView value={tab.content} onChange={onChange} onSave={onSave} />
+    return (
+      <SplitView
+        value={tab.content}
+        onChange={onChange}
+        onSave={onSave}
+        blockRemoteContent={blockRemoteContent}
+      />
+    )
   }
-  return <MarkdownView content={tab.content} />
+  return <MarkdownView content={tab.content} blockRemoteContent={blockRemoteContent} />
 }
