@@ -16,16 +16,3 @@ export const DEVELOPER_CSS = `.markdown-body {
   color: #9cdcfe;
   font-family: 'Fira Code', monospace;
 }`
-
-export function resolveCustomCssChoice({ customCssChoice, customCssUser1, customCssUser2 }) {
-  if (customCssChoice === 'editorial') {
-    return { choice: 'editorial', draft: EDITORIAL_CSS, readonly: true }
-  }
-  if (customCssChoice === 'developer') {
-    return { choice: 'developer', draft: DEVELOPER_CSS, readonly: true }
-  }
-  if (customCssChoice === 'user2') {
-    return { choice: 'user2', draft: customCssUser2 ?? '', readonly: false }
-  }
-  return { choice: 'user1', draft: customCssUser1 ?? '', readonly: false }
-}
