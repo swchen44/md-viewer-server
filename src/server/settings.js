@@ -3,6 +3,18 @@ import { getConfigPath, readConfig } from './config.js'
 
 const DEFAULT_PLANTUML_SERVER_URL = 'https://www.plantuml.com/plantuml'
 
+// Keys that must be a boolean, and keys that must be a string (besides
+// plantumlServerUrl, which gets its own dedicated URL validation above).
+const BOOLEAN_SETTINGS_KEYS = [
+  'privacyMode',
+  'blockRemoteContent',
+  'sendToPlantUmlServer',
+  'allowHtmlScripts',
+  'bakOnSave',
+]
+const STRING_SETTINGS_KEYS = ['customCssUser1', 'customCssUser2']
+const CUSTOM_CSS_CHOICES = ['editorial', 'developer', 'user1', 'user2']
+
 // config.json holds two kinds of state: daemon lifecycle state (token, port,
 // roots) that only the CLI owns, and user settings that the UI may change.
 // Only the keys listed here are settings; everything else is rejected so the
@@ -50,6 +62,31 @@ function assertValidPlantUmlServerUrl(value) {
   }
 }
 
+// A malformed value stored as-is would later be injected into frontend state
+// (e.g. a non-string customCssUser1/2 rendered inside a <style> tag) and
+// crash React's render for every connected browser. The endpoint is already
+// behind auth, so this is a robustness guard, not a security boundary.
+function assertValidBoolean(key, value) {
+  if (typeof value !== 'boolean') {
+    throw new InvalidSettingsError(`${key} must be a boolean`, { invalidKeys: [key] })
+  }
+}
+
+function assertValidSettingsString(key, value) {
+  if (typeof value !== 'string') {
+    throw new InvalidSettingsError(`${key} must be a string`, { invalidKeys: [key] })
+  }
+}
+
+function assertValidCustomCssChoice(value) {
+  if (!CUSTOM_CSS_CHOICES.includes(value)) {
+    throw new InvalidSettingsError(
+      `customCssChoice must be one of ${CUSTOM_CSS_CHOICES.join(', ')} (got ${JSON.stringify(value)})`,
+      { invalidKeys: ['customCssChoice'] }
+    )
+  }
+}
+
 export function readSettings(configDir) {
   const config = readConfig(configDir) ?? {}
   const privacyMode = config.privacyMode ?? false
@@ -93,6 +130,15 @@ export function updateSettings(configDir, updates) {
     // unvalidated value is an SSRF read primitive against anything the daemon
     // host can reach.
     assertValidPlantUmlServerUrl(updates.plantumlServerUrl)
+  }
+  for (const key of BOOLEAN_SETTINGS_KEYS) {
+    if (key in updates) assertValidBoolean(key, updates[key])
+  }
+  for (const key of STRING_SETTINGS_KEYS) {
+    if (key in updates) assertValidSettingsString(key, updates[key])
+  }
+  if ('customCssChoice' in updates) {
+    assertValidCustomCssChoice(updates.customCssChoice)
   }
 
   const config = readConfig(configDir) ?? {}

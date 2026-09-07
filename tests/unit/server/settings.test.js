@@ -166,6 +166,62 @@ describe('settings', () => {
     })
   })
 
+  describe('field type validation', () => {
+    describe.each([
+      'privacyMode',
+      'blockRemoteContent',
+      'sendToPlantUmlServer',
+      'allowHtmlScripts',
+      'bakOnSave',
+    ])('%s (boolean)', (key) => {
+      it('rejects a non-boolean value and leaves the stored value unchanged', () => {
+        const before = readSettings(configDir)[key]
+        expect(() => updateSettings(configDir, { [key]: 'not-a-boolean' })).toThrow(
+          InvalidSettingsError
+        )
+        expect(readSettings(configDir)[key]).toBe(before)
+      })
+
+      it('accepts a valid boolean value', () => {
+        const before = readSettings(configDir)[key]
+        expect(() => updateSettings(configDir, { [key]: !before })).not.toThrow()
+        expect(readSettings(configDir)[key]).toBe(!before)
+      })
+    })
+
+    describe.each(['customCssUser1', 'customCssUser2'])('%s (string)', (key) => {
+      it('rejects a non-string value and leaves the stored value unchanged', () => {
+        const before = readSettings(configDir)[key]
+        expect(() => updateSettings(configDir, { [key]: {} })).toThrow(InvalidSettingsError)
+        expect(readSettings(configDir)[key]).toBe(before)
+      })
+
+      it('accepts a valid string value', () => {
+        expect(() =>
+          updateSettings(configDir, { [key]: '.markdown-body { color: pink; }' })
+        ).not.toThrow()
+        expect(readSettings(configDir)[key]).toBe('.markdown-body { color: pink; }')
+      })
+    })
+
+    describe('customCssChoice (enum)', () => {
+      it('rejects a value outside the four allowed choices and leaves the stored value unchanged', () => {
+        const before = readSettings(configDir).customCssChoice
+        expect(() => updateSettings(configDir, { customCssChoice: 'bogus' })).toThrow(
+          InvalidSettingsError
+        )
+        expect(readSettings(configDir).customCssChoice).toBe(before)
+      })
+
+      it('accepts each of the four allowed choices', () => {
+        for (const choice of ['editorial', 'developer', 'user1', 'user2']) {
+          expect(() => updateSettings(configDir, { customCssChoice: choice })).not.toThrow()
+          expect(readSettings(configDir).customCssChoice).toBe(choice)
+        }
+      })
+    })
+  })
+
   describe('plantumlServerUrl validation', () => {
     it('rejects a string that is not a URL at all', () => {
       expect(() => updateSettings(configDir, { plantumlServerUrl: 'not a url' })).toThrow(
