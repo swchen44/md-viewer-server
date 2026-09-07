@@ -20,3 +20,7 @@ export function parseArgs(argv) {
 
   return { command, roots, port, debug, rotateToken }
 }
+
+export function resolveRoots(roots, cwd) {
+  return roots.length > 0 ? roots : [cwd]
+}

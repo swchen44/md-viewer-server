@@ -180,6 +180,34 @@ describe('CLI lifecycle: start -> status -> stop', () => {
     expect(JSON.parse(fs.readFileSync(configPath, 'utf-8')).token).toBe(originalToken)
   })
 
+  it('defaults to the invoking working directory when --root is omitted', async () => {
+    const cwdRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-default-root-'))
+    try {
+      const { stdout: startOut } = await execFileAsync(
+        process.execPath,
+        [CLI_PATH, 'start', '--port', String(TEST_PORT)],
+        { env, cwd: cwdRoot }
+      )
+      expect(startOut).toContain('Started.')
+      const token = extractToken(startOut)
+
+      const rootsRes = await fetch(`http://127.0.0.1:${TEST_PORT}/api/roots`, {
+        headers: { 'X-Auth-Token': token },
+      })
+      expect(rootsRes.status).toBe(200)
+
+      const configPath = path.join(configHome, 'md-viewer-server', 'config.json')
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+      // Compare realpaths: on macOS the child process's `process.cwd()`
+      // resolves the tmpdir symlink (/var -> /private/var), so the raw
+      // cwdRoot string wouldn't match byte-for-byte even though it's the
+      // same directory.
+      expect(config.roots).toEqual([fs.realpathSync(cwdRoot)])
+    } finally {
+      fs.rmSync(cwdRoot, { recursive: true, force: true })
+    }
+  })
+
   it('a re-`start` preserves plantumlServerUrl written via the settings API', async () => {
     const { stdout: startOut } = await execFileAsync(
       process.execPath,

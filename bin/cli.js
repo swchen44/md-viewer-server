@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { parseArgs } from '../src/server/commands/cli-args.js'
+import { parseArgs, resolveRoots } from '../src/server/commands/cli-args.js'
 import { runStart } from '../src/server/commands/start.js'
 import { runStatus } from '../src/server/commands/status.js'
 import { runStop } from '../src/server/commands/stop.js'
@@ -61,11 +61,12 @@ function printStopResult(result) {
 }
 
 async function main() {
-  const { command, roots, port, debug, rotateToken: shouldRotateToken } = parseArgs(
+  const { command, roots: rawRoots, port, debug, rotateToken: shouldRotateToken } = parseArgs(
     process.argv.slice(2)
   )
 
   if (command === 'start') {
+    const roots = resolveRoots(rawRoots, process.cwd())
     if (shouldRotateToken) {
       let result
       try {

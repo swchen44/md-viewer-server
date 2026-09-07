@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseArgs } from '../../../src/server/commands/cli-args.js'
+import { parseArgs, resolveRoots } from '../../../src/server/commands/cli-args.js'
 
 describe('parseArgs', () => {
   it('parses the command name', () => {
@@ -29,5 +29,15 @@ describe('parseArgs', () => {
   it('parses --rotate-token as a boolean flag', () => {
     expect(parseArgs(['start', '--rotate-token']).rotateToken).toBe(true)
     expect(parseArgs(['start']).rotateToken).toBe(false)
+  })
+})
+
+describe('resolveRoots', () => {
+  it('returns the given roots unchanged when at least one is provided', () => {
+    expect(resolveRoots(['/a', '/b'], '/cwd')).toEqual(['/a', '/b'])
+  })
+
+  it('defaults to the cwd when no --root was given at all', () => {
+    expect(resolveRoots([], '/cwd')).toEqual(['/cwd'])
   })
 })
