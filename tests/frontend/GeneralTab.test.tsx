@@ -43,6 +43,76 @@ describe('GeneralTab', () => {
     expect(screen.getByLabelText(/send.*plantuml/i)).toBeDisabled()
   })
 
+  // Privacy mode makes the server force these three to safe values while
+  // leaving the user's raw stored preference intact (so unlocking restores
+  // it). Displaying the raw value while locked therefore inverts what the
+  // user sees: a stored allowHtmlScripts:true would show as CHECKED —
+  // "scripts are allowed" — even though the server is refusing to allow them.
+  // Locked, the checkbox must show the effective (enforced) value.
+  describe('privacy-locked checkboxes display the effective value, not the raw stored one', () => {
+    const lockedSettings = baseSettings({
+      privacyMode: true,
+      blockRemoteContent: false,
+      sendToPlantUmlServer: true,
+      allowHtmlScripts: true,
+      effective: {
+        blockRemoteContent: true,
+        sendToPlantUmlServer: false,
+        allowHtmlScripts: false,
+      },
+    })
+
+    function renderLocked() {
+      render(
+        <GeneralTab
+          settings={lockedSettings}
+          updateSettings={() => {}}
+          prefs={DEFAULT_LOCAL_PREFS}
+          setPref={() => {}}
+        />
+      )
+    }
+
+    it('allowHtmlScripts shows unchecked when locked off despite a raw true', () => {
+      renderLocked()
+      expect(screen.getByLabelText(/allow.*html.*script/i)).not.toBeChecked()
+    })
+
+    it('sendToPlantUmlServer shows unchecked when locked off despite a raw true', () => {
+      renderLocked()
+      expect(screen.getByLabelText(/send.*plantuml/i)).not.toBeChecked()
+    })
+
+    it('blockRemoteContent shows checked when locked on despite a raw false', () => {
+      renderLocked()
+      expect(screen.getByLabelText(/block.*remote/i)).toBeChecked()
+    })
+
+    it('shows the raw stored values when privacy mode is off', () => {
+      render(
+        <GeneralTab
+          settings={baseSettings({
+            privacyMode: false,
+            blockRemoteContent: false,
+            sendToPlantUmlServer: true,
+            allowHtmlScripts: true,
+            effective: {
+              blockRemoteContent: false,
+              sendToPlantUmlServer: true,
+              allowHtmlScripts: true,
+            },
+          })}
+          updateSettings={() => {}}
+          prefs={DEFAULT_LOCAL_PREFS}
+          setPref={() => {}}
+        />
+      )
+      expect(screen.getByLabelText(/allow.*html.*script/i)).toBeChecked()
+      expect(screen.getByLabelText(/send.*plantuml/i)).toBeChecked()
+      expect(screen.getByLabelText(/block.*remote/i)).not.toBeChecked()
+    })
+  })
+
   it('toggling privacyMode calls updateSettings with the new value', () => {
     const updateSettings = vi.fn()
     render(

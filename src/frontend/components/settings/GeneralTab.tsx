@@ -13,6 +13,15 @@ export function GeneralTab({ settings, updateSettings, prefs, setPref }: General
   const { t, i18n } = useTranslation()
   const locked = settings?.privacyMode ?? false
 
+  // While privacy mode is on, the server forces blockRemoteContent /
+  // sendToPlantUmlServer / allowHtmlScripts to safe values (settings.effective)
+  // and every consumer honours those, but the user's own stored preference is
+  // kept untouched so unlocking restores it. These checkboxes therefore show
+  // the EFFECTIVE value while locked — showing the raw one would claim e.g.
+  // "HTML scripts allowed" while the server is refusing to allow them — and
+  // the raw one once unlocked, where it is what actually applies again.
+  // Display only: nothing here rewrites the stored value.
+
   // updateSettings (useSettings.ts) does its own PUT and does not itself
   // catch a network-level fetch rejection — it's a fire-and-forget call from
   // these onChange handlers (nothing here awaits it, matching how a simple
@@ -103,7 +112,7 @@ export function GeneralTab({ settings, updateSettings, prefs, setPref }: General
               <input
                 type="checkbox"
                 disabled={locked}
-                checked={settings.blockRemoteContent}
+                checked={locked ? settings.effective.blockRemoteContent : settings.blockRemoteContent}
                 onChange={(e) => applySetting({ blockRemoteContent: e.target.checked })}
               />
               {t('settings.blockRemoteContent', 'Block remote images/videos/iframes in documents')}
@@ -120,7 +129,9 @@ export function GeneralTab({ settings, updateSettings, prefs, setPref }: General
               <input
                 type="checkbox"
                 disabled={locked}
-                checked={settings.sendToPlantUmlServer}
+                checked={
+                  locked ? settings.effective.sendToPlantUmlServer : settings.sendToPlantUmlServer
+                }
                 onChange={(e) => applySetting({ sendToPlantUmlServer: e.target.checked })}
               />
               {t('settings.sendToPlantUmlServer', 'Send diagram source to PlantUML server')}
@@ -129,7 +140,7 @@ export function GeneralTab({ settings, updateSettings, prefs, setPref }: General
               <input
                 type="checkbox"
                 disabled={locked}
-                checked={settings.allowHtmlScripts}
+                checked={locked ? settings.effective.allowHtmlScripts : settings.allowHtmlScripts}
                 onChange={(e) => applySetting({ allowHtmlScripts: e.target.checked })}
               />
               {t('settings.allowHtmlScripts', 'Allow HTML files to execute scripts')}
