@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Settings, CustomCssChoice } from '../../hooks/useSettings.js'
 import { EDITORIAL_CSS, DEVELOPER_CSS } from '../../custom-css-presets.js'
+import { applySettingsPatch } from './apply-settings-patch.js'
 
 interface CustomCssTabProps {
   settings: Settings | null
-  updateSettings: (patch: Partial<Settings>) => void
+  updateSettings: (patch: Partial<Settings>) => void | Promise<void>
 }
 
 const CHOICES: CustomCssChoice[] = ['editorial', 'developer', 'user1', 'user2']
@@ -94,15 +95,15 @@ export function CustomCssTab({ settings, updateSettings }: CustomCssTabProps) {
     // cross-choice draft stash).
     setActiveChoice(choice)
     setDraft(null)
-    updateSettings({ customCssChoice: choice })
+    applySettingsPatch(updateSettings, { customCssChoice: choice })
   }
 
   function applyDraft() {
     if (draft === null) return
     if (activeChoice === 'user2') {
-      updateSettings({ customCssChoice: activeChoice, customCssUser2: draft })
+      applySettingsPatch(updateSettings, { customCssChoice: activeChoice, customCssUser2: draft })
     } else {
-      updateSettings({ customCssChoice: activeChoice, customCssUser1: draft })
+      applySettingsPatch(updateSettings, { customCssChoice: activeChoice, customCssUser1: draft })
     }
     // No `setDraft(null)` here on purpose — see the render-time sync above:
     // the draft is released only once `settings` reflects the applied value.

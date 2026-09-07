@@ -145,6 +145,59 @@ describe('CustomCssTab', () => {
     expect(screen.getByRole('textbox')).toHaveValue('.new {}')
   })
 
+  // IMPORTANT: these two tests deliberately do NOT use vi.fn() for
+  // `updateSettings`. Vitest's mock instrumentation attaches its own
+  // .then/.catch to whatever a mock implementation returns (to populate
+  // `mock.results`), which itself "handles" the rejection from Node's
+  // perspective — so a vi.fn()-wrapped rejecting function can never trigger
+  // `unhandledRejection` here regardless of whether the component under test
+  // has its own .catch. A plain function (with manual call tracking) is
+  // required to actually exercise that failure mode.
+  it('does not produce an unhandled promise rejection when updateSettings rejects (selectChoice)', async () => {
+    const onUnhandledRejection = vi.fn()
+    process.on('unhandledRejection', onUnhandledRejection)
+    try {
+      let calls = 0
+      function updateSettings() {
+        calls += 1
+        return Promise.reject(new Error('network blip'))
+      }
+      render(<CustomCssTab settings={baseSettings()} updateSettings={updateSettings} />)
+      fireEvent.click(screen.getByRole('button', { name: /editorial/i }))
+      expect(calls).toBe(1)
+      // Let the rejected promise's microtask queue flush.
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(onUnhandledRejection).not.toHaveBeenCalled()
+    } finally {
+      process.off('unhandledRejection', onUnhandledRejection)
+    }
+  })
+
+  it('does not produce an unhandled promise rejection when updateSettings rejects (applyDraft)', async () => {
+    const onUnhandledRejection = vi.fn()
+    process.on('unhandledRejection', onUnhandledRejection)
+    try {
+      let calls = 0
+      function updateSettings() {
+        calls += 1
+        return Promise.reject(new Error('network blip'))
+      }
+      render(
+        <CustomCssTab
+          settings={baseSettings({ customCssChoice: 'user1', customCssUser1: '.old {}' })}
+          updateSettings={updateSettings}
+        />
+      )
+      fireEvent.change(screen.getByRole('textbox'), { target: { value: '.new {}' } })
+      fireEvent.click(screen.getByRole('button', { name: /apply/i }))
+      expect(calls).toBe(1)
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(onUnhandledRejection).not.toHaveBeenCalled()
+    } finally {
+      process.off('unhandledRejection', onUnhandledRejection)
+    }
+  })
+
   it('drops the local draft once settings reflect the applied value', () => {
     const updateSettings = vi.fn()
     const { rerender } = render(
