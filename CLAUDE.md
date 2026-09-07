@@ -32,11 +32,14 @@ See `docs/superpowers/specs/2026-09-05-md-viewer-server-design.md` for the full 
 
 When executing the implementation plan, pause after each completed UI-facing segment (e.g. one panel, one view mode, one settings tab) and present it to the user for acceptance before starting the next segment. The user may not be at the keyboard continuously: schedule a wakeup roughly 3 minutes out; if there's no response by then, treat the segment as accepted and continue to the next one. Non-UI backend segments (API endpoints, daemon logic) don't need this checkpoint — only pause where a human needs to actually look at something.
 
-## Code review and plan review: do not use Codex
+## Code review and plan review: Codex is back on trial
 
-Do not use the `codex` plugin (`/codex:review`, `/codex:adversarial-review`, or any other `codex:*` command) for code review or plan review. An earlier version of this file directed review through Codex; that's reverted — the tool repeatedly hung for long stretches (stuck on an environment-side command unrelated to the diff being reviewed) during real use in this project, wasting significant time across multiple sessions.
+Codex was banned from review earlier in this project's history (`/codex:review`/`/codex:adversarial-review` repeatedly hung for long stretches, stuck on an environment-side command unrelated to the diff being reviewed, wasting significant time across multiple sessions). The user has since asked to try it again to see whether it still hangs — so it's back in rotation, but on a short leash:
 
-Review (per-task, and the final whole-branch/whole-plan closing review) goes back to dispatching a Claude reviewer subagent — sonnet or opus, never haiku, matching how implementers are dispatched. This is the original subagent-driven-development review flow: after a task's implementer reports back, generate the review package (`scripts/review-package <prev-commit> <new-commit>`) and dispatch a sonnet/opus reviewer subagent against it. If Critical/Important findings come back, dispatch a fix the same way (sonnet/opus, never haiku).
+- Give a Codex review command a bounded amount of time to respond. If it hangs the way it did before (stuck with no progress for a long stretch), stop waiting on it, fall back to dispatching a Claude reviewer subagent (sonnet/opus) against the same review package instead, and tell the user it hung again.
+- If Codex completes normally, its findings are used the same way a Claude reviewer subagent's findings would be.
+
+Whichever path is used, the flow is otherwise the original subagent-driven-development one: after a task's implementer reports back, generate the review package (`scripts/review-package <prev-commit> <new-commit>`), get it reviewed (Codex first, Claude sonnet/opus reviewer subagent as fallback or default), and if Critical/Important findings come back, dispatch a fix via a Claude sonnet/opus subagent (never haiku — this applies regardless of which review path found the issue).
 
 ## Watch for orphaned `vitest` worker processes
 
