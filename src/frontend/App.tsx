@@ -58,6 +58,18 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const { settings, updateSettings } = useSettings()
   const { prefs, setPref } = useLocalPrefs()
+
+  // 'system' removes the attribute entirely so the existing
+  // prefers-color-scheme CSS media query decides; 'light'/'dark' set it
+  // explicitly to override that media query with the user's choice.
+  useEffect(() => {
+    if (prefs.theme === 'system') {
+      delete document.documentElement.dataset.theme
+    } else {
+      document.documentElement.dataset.theme = prefs.theme
+    }
+  }, [prefs.theme])
+
   // Guards against a stale /api/search response (issued per-root, then merged)
   // overwriting newer state if the user changes/clears the query before an
   // earlier request finishes — only the most recently issued search may apply.

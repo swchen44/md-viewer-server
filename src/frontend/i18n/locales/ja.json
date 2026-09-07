@@ -52,7 +52,14 @@
     "blockRemoteContent": "文書内のリモート画像/動画/iframeをブロック",
     "plantumlServerUrl": "PlantUML サーバー URL",
     "sendToPlantUmlServer": "図の元データを PlantUML サーバーに送信",
-    "allowHtmlScripts": "HTML ファイルでのスクリプト実行を許可"
+    "allowHtmlScripts": "HTML ファイルでのスクリプト実行を許可",
+    "theme": "テーマ",
+    "themeLight": "ライト",
+    "themeDark": "ダーク",
+    "themeSystem": "システムに従う",
+    "accentColor": "アクセントカラー",
+    "editorFontSize": "エディタのフォントサイズ",
+    "editorIndentWidth": "エディタのインデント幅"
   },
   "topBar": {
     "settingsLabel": "設定"

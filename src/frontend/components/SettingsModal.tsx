@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import type { Settings } from '../hooks/useSettings.js'
 import { DEFAULT_LOCAL_PREFS, type LocalPrefs } from '../hooks/useLocalPrefs.js'
 import { GeneralTab } from './settings/GeneralTab.js'
+import { AppearanceTab } from './settings/AppearanceTab.js'
 
 type Category = 'general' | 'appearance' | 'customCss'
 
@@ -45,7 +46,8 @@ export function SettingsModal({
         {category === 'general' && (
           <GeneralTab settings={settings} updateSettings={updateSettings} prefs={prefs} setPref={setPref} />
         )}
-        {/* Task 7/8 replace this with AppearanceTab/CustomCssTab based on `category` */}
+        {category === 'appearance' && <AppearanceTab prefs={prefs} setPref={setPref} />}
+        {/* Task 8 replaces this with CustomCssTab based on `category` */}
       </div>
       <button aria-label="close" onClick={onClose}>
         ×

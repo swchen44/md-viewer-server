@@ -52,7 +52,14 @@
     "blockRemoteContent": "Block remote images/videos/iframes in documents",
     "plantumlServerUrl": "PlantUML server URL",
     "sendToPlantUmlServer": "Send diagram source to PlantUML server",
-    "allowHtmlScripts": "Allow HTML files to execute scripts"
+    "allowHtmlScripts": "Allow HTML files to execute scripts",
+    "theme": "Theme",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeSystem": "System",
+    "accentColor": "Accent color",
+    "editorFontSize": "Editor font size",
+    "editorIndentWidth": "Editor indent width"
   },
   "topBar": {
     "settingsLabel": "Settings"

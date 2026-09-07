@@ -52,7 +52,14 @@
     "blockRemoteContent": "封鎖文件中的遠端圖片/影片/iframe",
     "plantumlServerUrl": "PlantUML 伺服器網址",
     "sendToPlantUmlServer": "將圖表原始碼傳送至 PlantUML 伺服器",
-    "allowHtmlScripts": "允許 HTML 檔案執行指令碼"
+    "allowHtmlScripts": "允許 HTML 檔案執行指令碼",
+    "theme": "主題",
+    "themeLight": "淺色",
+    "themeDark": "深色",
+    "themeSystem": "跟隨系統",
+    "accentColor": "主色調",
+    "editorFontSize": "編輯器字型大小",
+    "editorIndentWidth": "編輯器縮排寬度"
   },
   "topBar": {
     "settingsLabel": "設定"

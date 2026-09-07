@@ -52,7 +52,14 @@
     "blockRemoteContent": "阻止文档中的远程图片/视频/iframe",
     "plantumlServerUrl": "PlantUML 服务器地址",
     "sendToPlantUmlServer": "将图表源码发送到 PlantUML 服务器",
-    "allowHtmlScripts": "允许 HTML 文件执行脚本"
+    "allowHtmlScripts": "允许 HTML 文件执行脚本",
+    "theme": "主题",
+    "themeLight": "浅色",
+    "themeDark": "深色",
+    "themeSystem": "跟随系统",
+    "accentColor": "主色调",
+    "editorFontSize": "编辑器字体大小",
+    "editorIndentWidth": "编辑器缩进宽度"
   },
   "topBar": {
     "settingsLabel": "设置"

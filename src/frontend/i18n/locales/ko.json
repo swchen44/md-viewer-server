@@ -52,7 +52,14 @@
     "blockRemoteContent": "문서 내 원격 이미지/동영상/iframe 차단",
     "plantumlServerUrl": "PlantUML 서버 URL",
     "sendToPlantUmlServer": "다이어그램 소스를 PlantUML 서버로 전송",
-    "allowHtmlScripts": "HTML 파일의 스크립트 실행 허용"
+    "allowHtmlScripts": "HTML 파일의 스크립트 실행 허용",
+    "theme": "테마",
+    "themeLight": "라이트",
+    "themeDark": "다크",
+    "themeSystem": "시스템 설정 따름",
+    "accentColor": "강조 색상",
+    "editorFontSize": "편집기 글꼴 크기",
+    "editorIndentWidth": "편집기 들여쓰기 너비"
   },
   "topBar": {
     "settingsLabel": "설정"
