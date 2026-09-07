@@ -41,10 +41,42 @@ export function useSettings() {
 
   useEffect(() => {
     apiFetch('/api/settings')
-      .then((res) => res.json())
-      .then((data) => {
+      .then(async (res) => {
+        if (!res.ok) {
+          // A non-ok body (401 UNAUTHORIZED on a stale token after
+          // --rotate-token, 500, an HTML error page from something upstream)
+          // must NOT become the settings object. Doing so is worse than
+          // useless for the privacy-lock UI: GeneralTab derives
+          // `locked = settings?.privacyMode ?? false` and each checkbox from
+          // these fields, so an error body silently paints every privacy
+          // control as unlocked/off while the server may in fact have privacy
+          // mode ON. Keeping `settings` null instead makes the tab render its
+          // loading state (no controls at all), which is honest. Mirrors
+          // App.tsx's /api/roots mount effect.
+          let errorCode: string | undefined
+          try {
+            const body = await res.json()
+            errorCode = body?.errorCode
+          } catch {
+            // Non-JSON body — fall through with errorCode left undefined.
+          }
+          console.error('Failed to load /api/settings', res.status, errorCode)
+          if (!mountedRef.current) return
+          setError(errorCode ?? 'UNKNOWN_ERROR')
+          return
+        }
+        const data = await res.json()
         if (!mountedRef.current) return
+        setError(null)
         setSettings(data)
+      })
+      .catch((err) => {
+        // Network-level failure (daemon stopped, connection dropped). Without
+        // this the rejection is unhandled and `settings` stays null with no
+        // error ever surfaced.
+        console.error('Failed to load /api/settings', err)
+        if (!mountedRef.current) return
+        setError('UNKNOWN_ERROR')
       })
   }, [])
 

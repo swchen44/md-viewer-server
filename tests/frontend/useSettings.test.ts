@@ -63,6 +63,45 @@ describe('useSettings', () => {
     expect(result.current.settings?.allowHtmlScripts).toBe(false)
   })
 
+  // The mount fetch used to hand whatever JSON came back straight to
+  // setSettings. A 401 body ({errorCode: 'UNAUTHORIZED'}) then became the
+  // settings object, and every consumer silently read garbage: GeneralTab's
+  // `locked = settings?.privacyMode ?? false` resolves to false, painting the
+  // privacy-locked controls as unlocked while the server may actually have
+  // privacy mode on. Same class of bug (and same fix) as App.tsx's /api/roots
+  // mount effect.
+  it('keeps settings null and sets error when the mount fetch returns a non-ok response', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ errorCode: 'UNAUTHORIZED' }), { status: 401 })
+      )
+    )
+    const { result } = renderHook(() => useSettings())
+    await waitFor(() => expect(result.current.error).not.toBeNull())
+    expect(result.current.error).toBe('UNAUTHORIZED')
+    expect(result.current.settings).toBeNull()
+  })
+
+  it('keeps settings null and sets error when the mount fetch rejects at the network level', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+    const { result } = renderHook(() => useSettings())
+    await waitFor(() => expect(result.current.error).not.toBeNull())
+    expect(result.current.error).toBe('UNKNOWN_ERROR')
+    expect(result.current.settings).toBeNull()
+  })
+
+  it('keeps settings null and sets error when a non-ok mount response has a non-JSON body', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response('<html>502 Bad Gateway</html>', { status: 502 }))
+    )
+    const { result } = renderHook(() => useSettings())
+    await waitFor(() => expect(result.current.error).not.toBeNull())
+    expect(result.current.error).toBe('UNKNOWN_ERROR')
+    expect(result.current.settings).toBeNull()
+  })
+
   it('updateSettings PUTs the patch and updates local state from the response', async () => {
     const fetchMock = vi
       .fn()
