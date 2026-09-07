@@ -959,4 +959,28 @@ describe('App main content, save, draft, and conflict wiring', () => {
     expect(screen.queryByTestId('mode-edit')).not.toBeInTheDocument()
     expect(screen.queryByTestId('mode-split')).not.toBeInTheDocument()
   })
+
+  it('passes settings.effective.allowHtmlScripts through to TabContent for an open .html tab', async () => {
+    stubRoutedFetch([
+      {
+        match: '/api/settings',
+        response: {
+          plantumlServerUrl: 'https://www.plantuml.com/plantuml',
+          sendToPlantUmlServer: false,
+          privacyMode: false,
+          blockRemoteContent: false,
+          allowHtmlScripts: true,
+          bakOnSave: false,
+          effective: { blockRemoteContent: false, sendToPlantUmlServer: false, allowHtmlScripts: true },
+        },
+      },
+      { match: '/api/roots', response: [{ id: 0, name: 'proj' }] },
+      { match: '/api/files', response: { files: [{ relPath: 'a.html', size: 5, mtimeMs: 1 }] } },
+      { match: '/api/file?', response: { content: '<p>hi</p>', mtimeMs: 1, encoding: 'utf-8' } },
+    ])
+    render(<App />)
+    await waitFor(() => screen.getByText('a.html'))
+    fireEvent.click(screen.getByText('a.html'))
+    await waitFor(() => expect(screen.getByTitle('html-preview').getAttribute('sandbox')).toContain('allow-scripts'))
+  })
 })

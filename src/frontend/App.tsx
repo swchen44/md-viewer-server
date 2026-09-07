@@ -572,7 +572,7 @@ export function App() {
                     }
                     onChange={(value) => handleChange(activeTab.id, value)}
                     onSave={() => handleSave(activeTab.id)}
-                    allowHtmlScripts={false}
+                    allowHtmlScripts={settings?.effective?.allowHtmlScripts ?? false}
                   />
                 </div>
                 {saveError && saveError.tabId === activeTab.id && (
