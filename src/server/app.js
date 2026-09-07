@@ -11,6 +11,7 @@ import { createAssetRouter } from './api/asset.js'
 import { createSearchRouter } from './api/search.js'
 import { createSettingsRouter } from './api/settings.js'
 import { createPlantUmlRouter } from './api/plantuml.js'
+import { createVersionCheckRouter } from './api/version-check.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -60,6 +61,7 @@ export function createApp({
   app.use('/api', authMiddleware, createSearchRouter(roots, extensions))
   app.use('/api', authMiddleware, createSettingsRouter(configDir))
   app.use('/api', authMiddleware, createPlantUmlRouter(configDir))
+  app.use('/api', authMiddleware, createVersionCheckRouter(configDir, packageVersion))
 
   app.post('/api/shutdown', (req, res) => {
     const token = req.header('X-Auth-Token')

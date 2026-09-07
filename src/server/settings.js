@@ -11,6 +11,7 @@ const BOOLEAN_SETTINGS_KEYS = [
   'sendToPlantUmlServer',
   'allowHtmlScripts',
   'bakOnSave',
+  'checkForUpdates',
 ]
 const STRING_SETTINGS_KEYS = ['customCssUser1', 'customCssUser2']
 const CUSTOM_CSS_CHOICES = ['editorial', 'developer', 'user1', 'user2']
@@ -29,6 +30,7 @@ const ALLOWED_SETTINGS_KEYS = [
   'customCssChoice',
   'customCssUser1',
   'customCssUser2',
+  'checkForUpdates',
 ]
 
 export class InvalidSettingsError extends Error {
@@ -104,6 +106,7 @@ export function readSettings(configDir) {
     customCssChoice: config.customCssChoice ?? 'user1',
     customCssUser1: config.customCssUser1 ?? '',
     customCssUser2: config.customCssUser2 ?? '',
+    checkForUpdates: config.checkForUpdates ?? false,
     // Privacy mode locks these three to safe values for any code path that
     // makes a security-relevant decision. Stored preferences above are left
     // untouched so disabling privacy mode restores what the user had.

@@ -56,6 +56,15 @@ describe('settings', () => {
     expect(readSettings(configDir).sendToPlantUmlServer).toBe(true)
   })
 
+  it('defaults checkForUpdates to false', () => {
+    expect(readSettings(configDir).checkForUpdates).toBe(false)
+  })
+
+  it('accepts checkForUpdates through updateSettings', () => {
+    updateSettings(configDir, { checkForUpdates: true })
+    expect(readSettings(configDir).checkForUpdates).toBe(true)
+  })
+
   describe('key whitelist', () => {
     it('rejects daemon lifecycle keys instead of merging them into config.json', () => {
       const before = JSON.parse(fs.readFileSync(path.join(configDir, 'config.json'), 'utf-8'))
@@ -173,6 +182,7 @@ describe('settings', () => {
       'sendToPlantUmlServer',
       'allowHtmlScripts',
       'bakOnSave',
+      'checkForUpdates',
     ])('%s (boolean)', (key) => {
       it('rejects a non-boolean value and leaves the stored value unchanged', () => {
         const before = readSettings(configDir)[key]
