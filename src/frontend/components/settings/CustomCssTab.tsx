@@ -47,7 +47,7 @@ export function CustomCssTab({ settings, updateSettings }: CustomCssTabProps) {
   // local click-driven state above can't cover on its own: `settings` arriving
   // (or changing) from OUTSIDE this component — e.g. the initial `null` ->
   // loaded transition, since useState's initializer only runs once at mount.
-  // A prop-driven change here also means it wasn't this component's own
+  // A genuinely EXTERNAL change here also means it wasn't this component's own
   // in-progress edit, so any unapplied draft is discarded too — consistent
   // with the brief's "no cross-choice draft stash" rule.
   const [prevSettingsChoice, setPrevSettingsChoice] = useState<CustomCssChoice | null>(
@@ -55,8 +55,31 @@ export function CustomCssTab({ settings, updateSettings }: CustomCssTabProps) {
   )
   if (settings && settings.customCssChoice !== prevSettingsChoice) {
     setPrevSettingsChoice(settings.customCssChoice)
-    setActiveChoice(settings.customCssChoice)
-    setDraft(null)
+    // "Different from the last value of the prop" is NOT the same as
+    // "external": selecting a choice sets `activeChoice` locally and fires a
+    // PUT, so the prop changes to that same choice a round-trip later as a
+    // pure ECHO of our own click. Resetting on that echo would wipe whatever
+    // the user typed in the meantime. Only when the incoming choice differs
+    // from what this component already considers active did the change come
+    // from somewhere else (initial load, another client, another tab of this
+    // UI) and warrant resetting the local state.
+    if (settings.customCssChoice !== activeChoice) {
+      setActiveChoice(settings.customCssChoice)
+      setDraft(null)
+    }
+  }
+
+  // Drop an applied draft only once the source of truth has caught up with it.
+  // `applyDraft` deliberately does NOT clear `draft` itself: the PUT is still
+  // in flight at that point and `settings` still holds the pre-Apply content,
+  // so clearing there would flash the textarea back to the old CSS — and, if
+  // the PUT fails, would drop the user's typed CSS from the UI for good. When
+  // the PUT succeeds, `settings` arrives carrying exactly what was applied and
+  // the local copy is redundant, so it's released here; when it fails,
+  // `settings` never matches and the draft stays visible and editable.
+  if (settings && draft !== null && (activeChoice === 'user1' || activeChoice === 'user2')) {
+    const stored = activeChoice === 'user2' ? settings.customCssUser2 : settings.customCssUser1
+    if (stored === draft) setDraft(null)
   }
 
   if (!settings) return null
@@ -81,7 +104,8 @@ export function CustomCssTab({ settings, updateSettings }: CustomCssTabProps) {
     } else {
       updateSettings({ customCssChoice: activeChoice, customCssUser1: draft })
     }
-    setDraft(null)
+    // No `setDraft(null)` here on purpose — see the render-time sync above:
+    // the draft is released only once `settings` reflects the applied value.
   }
 
   return (

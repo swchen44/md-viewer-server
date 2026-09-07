@@ -69,4 +69,106 @@ describe('CustomCssTab', () => {
     render(<CustomCssTab settings={baseSettings({ customCssChoice: 'editorial' })} updateSettings={() => {}} />)
     expect(screen.queryByRole('button', { name: /apply/i })).not.toBeInTheDocument()
   })
+
+  it('keeps text typed after a choice click when the settings prop later echoes that same choice', () => {
+    // The click fires a PUT; while it is in flight the user starts typing. When
+    // the PUT resolves, `settings.customCssChoice` changes user1 -> user2, but
+    // that is this component's OWN choice coming back, not an external change,
+    // so it must not wipe the in-progress draft.
+    const updateSettings = vi.fn()
+    const { rerender } = render(
+      <CustomCssTab
+        settings={baseSettings({ customCssChoice: 'user1', customCssUser1: '.one {}' })}
+        updateSettings={updateSettings}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /user 2/i }))
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '.typed-after-click {}' } })
+    rerender(
+      <CustomCssTab
+        settings={baseSettings({ customCssChoice: 'user2', customCssUser1: '.one {}' })}
+        updateSettings={updateSettings}
+      />
+    )
+    expect(screen.getByRole('textbox')).toHaveValue('.typed-after-click {}')
+  })
+
+  it('a genuinely external choice change still resets the active choice and drops the draft', () => {
+    const { rerender } = render(
+      <CustomCssTab
+        settings={baseSettings({ customCssChoice: 'user1', customCssUser1: '.one {}' })}
+        updateSettings={() => {}}
+      />
+    )
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '.unapplied {}' } })
+    rerender(
+      <CustomCssTab
+        settings={baseSettings({ customCssChoice: 'developer', customCssUser1: '.one {}' })}
+        updateSettings={() => {}}
+      />
+    )
+    const textarea = screen.getByRole('textbox')
+    expect(textarea).toHaveValue(DEVELOPER_CSS)
+    expect(textarea).toHaveAttribute('readonly')
+  })
+
+  it('keeps showing the just-applied content while the PUT is still in flight', () => {
+    const updateSettings = vi.fn(() => new Promise<void>(() => {}))
+    render(
+      <CustomCssTab
+        settings={baseSettings({ customCssChoice: 'user1', customCssUser1: '.old {}' })}
+        updateSettings={updateSettings}
+      />
+    )
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '.new {}' } })
+    fireEvent.click(screen.getByRole('button', { name: /apply/i }))
+    expect(screen.getByRole('textbox')).toHaveValue('.new {}')
+  })
+
+  it('keeps the typed CSS visible when the PUT fails and settings never catch up', () => {
+    const updateSettings = vi.fn()
+    const { rerender } = render(
+      <CustomCssTab
+        settings={baseSettings({ customCssChoice: 'user1', customCssUser1: '.old {}' })}
+        updateSettings={updateSettings}
+      />
+    )
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '.new {}' } })
+    fireEvent.click(screen.getByRole('button', { name: /apply/i }))
+    // Failed PUT: the parent's settings stay at the pre-Apply value.
+    rerender(
+      <CustomCssTab
+        settings={baseSettings({ customCssChoice: 'user1', customCssUser1: '.old {}' })}
+        updateSettings={updateSettings}
+      />
+    )
+    expect(screen.getByRole('textbox')).toHaveValue('.new {}')
+  })
+
+  it('drops the local draft once settings reflect the applied value', () => {
+    const updateSettings = vi.fn()
+    const { rerender } = render(
+      <CustomCssTab
+        settings={baseSettings({ customCssChoice: 'user1', customCssUser1: '.old {}' })}
+        updateSettings={updateSettings}
+      />
+    )
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '.new {}' } })
+    fireEvent.click(screen.getByRole('button', { name: /apply/i }))
+    // PUT succeeds: the source of truth catches up, so the draft is dropped...
+    rerender(
+      <CustomCssTab
+        settings={baseSettings({ customCssChoice: 'user1', customCssUser1: '.new {}' })}
+        updateSettings={updateSettings}
+      />
+    )
+    // ...and a later external edit of the same slot is therefore visible.
+    rerender(
+      <CustomCssTab
+        settings={baseSettings({ customCssChoice: 'user1', customCssUser1: '.external {}' })}
+        updateSettings={updateSettings}
+      />
+    )
+    expect(screen.getByRole('textbox')).toHaveValue('.external {}')
+  })
 })

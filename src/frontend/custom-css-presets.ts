@@ -1,9 +1,13 @@
 // Kept in sync with src/server/custom-css-presets.js's EDITORIAL_CSS/DEVELOPER_CSS
 // by hand — frontend and backend are separate bundles with no shared-module
-// mechanism, so duplicating these two string constants is the simplest option;
-// CustomCssTab.test.tsx importing both from here locks them to this file, and
-// the backend's own tests lock its copy, so a drift would show up as a visible
-// test failure rather than silently diverging.
+// mechanism, so duplicating these two string constants is the simplest option.
+// The two copies are locked together by tests/unit/server/custom-css-presets.test.js,
+// which reads THIS file as source text (the node-environment unit suite cannot
+// import a frontend .ts module), extracts the two backtick literals below, and
+// asserts they equal the backend's constants — so editing one copy without the
+// other fails that test instead of silently diverging. Keep both constants as
+// plain backtick literals with no `${}` interpolation, which is what makes that
+// text extraction exact.
 export const EDITORIAL_CSS = `.markdown-body {
   background: #f5f1e8;
   font-family: Georgia, 'Times New Roman', serif;
