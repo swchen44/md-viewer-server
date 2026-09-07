@@ -48,6 +48,7 @@
     "charsetCompatMode": "문자 인코딩 호환 모드(UTF-8로 강제 재디코딩)",
     "autoReload": "파일 변경 시 보고 있는 탭 자동 새로고침",
     "bakOnSave": "저장 시 .bak 백업 파일 생성",
+    "checkForUpdates": "업데이트 확인(옵트인, 자동 업데이트 아님)",
     "privacyModeLabel": "개인정보 보호 모드",
     "blockRemoteContent": "문서 내 원격 이미지/동영상/iframe 차단",
     "plantumlServerUrl": "PlantUML 서버 URL",

@@ -48,6 +48,7 @@
     "charsetCompatMode": "编码兼容模式(强制以 UTF-8 重新解码)",
     "autoReload": "文件变更时自动重新加载查看中的标签页",
     "bakOnSave": "保存时创建 .bak 备份文件",
+    "checkForUpdates": "检查更新(可选启用,不会自动更新)",
     "privacyModeLabel": "隐私模式",
     "blockRemoteContent": "阻止文档中的远程图片/视频/iframe",
     "plantumlServerUrl": "PlantUML 服务器地址",

@@ -137,6 +137,18 @@ export function GeneralTab({ settings, updateSettings, prefs, setPref }: General
             {t('settings.bakOnSave', 'Create .bak backup on save')}
           </label>
 
+          <label>
+            <input
+              type="checkbox"
+              checked={settings.checkForUpdates}
+              onChange={(e) => applySetting({ checkForUpdates: e.target.checked })}
+            />
+            {t(
+              'settings.checkForUpdates',
+              'Check for updates (opt-in, no auto-update)'
+            )}
+          </label>
+
           <fieldset>
             <legend>{t('settings.privacyModeLabel', 'Privacy mode')}</legend>
             <label>

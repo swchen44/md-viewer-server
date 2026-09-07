@@ -10,6 +10,7 @@ export interface Settings {
   blockRemoteContent: boolean
   allowHtmlScripts: boolean
   bakOnSave: boolean
+  checkForUpdates: boolean
   customCssChoice: CustomCssChoice
   customCssUser1: string
   customCssUser2: string

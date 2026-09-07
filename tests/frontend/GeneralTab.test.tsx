@@ -11,6 +11,7 @@ function baseSettings(overrides = {}) {
     blockRemoteContent: false,
     allowHtmlScripts: false,
     bakOnSave: false,
+    checkForUpdates: false,
     effective: { blockRemoteContent: false, sendToPlantUmlServer: false, allowHtmlScripts: false },
     ...overrides,
   }
@@ -212,6 +213,46 @@ describe('GeneralTab', () => {
         />
       )
       expect(input).toHaveValue('https://b.example.com/extra')
+    })
+  })
+
+  describe('checkForUpdates toggle', () => {
+    it('reflects the current settings value (unchecked when false)', () => {
+      render(
+        <GeneralTab
+          settings={baseSettings({ checkForUpdates: false })}
+          updateSettings={() => {}}
+          prefs={DEFAULT_LOCAL_PREFS}
+          setPref={() => {}}
+        />
+      )
+      expect(screen.getByLabelText(/check for updates/i)).not.toBeChecked()
+    })
+
+    it('reflects the current settings value (checked when true)', () => {
+      render(
+        <GeneralTab
+          settings={baseSettings({ checkForUpdates: true })}
+          updateSettings={() => {}}
+          prefs={DEFAULT_LOCAL_PREFS}
+          setPref={() => {}}
+        />
+      )
+      expect(screen.getByLabelText(/check for updates/i)).toBeChecked()
+    })
+
+    it('clicking it calls updateSettings with the new value', () => {
+      const updateSettings = vi.fn()
+      render(
+        <GeneralTab
+          settings={baseSettings({ checkForUpdates: false })}
+          updateSettings={updateSettings}
+          prefs={DEFAULT_LOCAL_PREFS}
+          setPref={() => {}}
+        />
+      )
+      fireEvent.click(screen.getByLabelText(/check for updates/i))
+      expect(updateSettings).toHaveBeenCalledWith({ checkForUpdates: true })
     })
   })
 

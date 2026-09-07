@@ -48,6 +48,7 @@
     "charsetCompatMode": "Charset compatibility mode (force UTF-8 redecoding)",
     "autoReload": "Auto-reload viewing tabs on file change",
     "bakOnSave": "Create .bak backup on save",
+    "checkForUpdates": "Check for updates (opt-in, no auto-update)",
     "privacyModeLabel": "Privacy mode",
     "blockRemoteContent": "Block remote images/videos/iframes in documents",
     "plantumlServerUrl": "PlantUML server URL",

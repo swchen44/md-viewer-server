@@ -48,6 +48,7 @@
     "charsetCompatMode": "文字コード互換モード(UTF-8での再デコードを強制)",
     "autoReload": "ファイル変更時に表示中のタブを自動再読み込み",
     "bakOnSave": "保存時に .bak バックアップを作成",
+    "checkForUpdates": "更新を確認する(オプトイン、自動更新はしません)",
     "privacyModeLabel": "プライバシーモード",
     "blockRemoteContent": "文書内のリモート画像/動画/iframeをブロック",
     "plantumlServerUrl": "PlantUML サーバー URL",

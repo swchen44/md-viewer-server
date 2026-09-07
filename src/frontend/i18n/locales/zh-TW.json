@@ -48,6 +48,7 @@
     "charsetCompatMode": "編碼相容模式(強制以 UTF-8 重新解碼)",
     "autoReload": "檔案變更時自動重新載入檢視中的分頁",
     "bakOnSave": "儲存時建立 .bak 備份檔",
+    "checkForUpdates": "檢查更新(選擇性啟用,不會自動更新)",
     "privacyModeLabel": "隱私模式",
     "blockRemoteContent": "封鎖文件中的遠端圖片/影片/iframe",
     "plantumlServerUrl": "PlantUML 伺服器網址",
