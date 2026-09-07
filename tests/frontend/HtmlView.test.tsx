@@ -43,7 +43,7 @@ describe('HtmlView', () => {
       expect(srcdoc).toContain('<p>hi</p>')
     })
 
-    it('places the CSP meta inside <head> when the document has one, ahead of any resource', () => {
+    it('places the CSP meta ahead of any resource in the document', () => {
       render(
         <HtmlView
           content={'<html><head><title>t</title></head><body><img src="https://x/y.png"></body></html>'}
@@ -56,7 +56,54 @@ describe('HtmlView', () => {
       expect(metaIndex).toBeGreaterThan(-1)
       expect(metaIndex).toBeLessThan(srcdoc.indexOf('<title>'))
       expect(metaIndex).toBeLessThan(srcdoc.indexOf('<img'))
-      expect(srcdoc.indexOf('<head>')).toBeLessThan(metaIndex)
+    })
+
+    it('preserves a leading doctype ahead of the CSP meta, so the document stays in standards mode', () => {
+      render(
+        <HtmlView
+          content={'<!DOCTYPE html><html><body>hi</body></html>'}
+          allowScripts={false}
+          blockRemoteContent={true}
+        />
+      )
+      const srcdoc = screen.getByTitle('html-preview').getAttribute('srcdoc') ?? ''
+      expect(srcdoc.indexOf('<!DOCTYPE html>')).toBe(0)
+      expect(srcdoc.indexOf('Content-Security-Policy')).toBeGreaterThan(0)
+      expect(srcdoc.indexOf('Content-Security-Policy')).toBeLessThan(srcdoc.indexOf('<body>'))
+    })
+
+    it('is not defeated by a fake <head> planted in a comment before the real one', () => {
+      render(
+        <HtmlView
+          content={
+            '<!-- <head> --><html><head></head><body><img src="https://evil.example/pixel.png"></body></html>'
+          }
+          allowScripts={false}
+          blockRemoteContent={true}
+        />
+      )
+      const srcdoc = screen.getByTitle('html-preview').getAttribute('srcdoc') ?? ''
+      const metaIndex = srcdoc.indexOf('Content-Security-Policy')
+      expect(metaIndex).toBeGreaterThan(-1)
+      // The policy must land outside the comment, or the browser never parses it.
+      expect(srcdoc.indexOf('<!--')).toBeGreaterThan(metaIndex)
+      expect(metaIndex).toBeLessThan(srcdoc.indexOf('<img'))
+    })
+
+    it('is not defeated by a fake <head> planted inside a <script> string', () => {
+      render(
+        <HtmlView
+          content={
+            '<script>var s = "<head>"</script><img src="https://evil.example/pixel.png">'
+          }
+          allowScripts={true}
+          blockRemoteContent={true}
+        />
+      )
+      const srcdoc = screen.getByTitle('html-preview').getAttribute('srcdoc') ?? ''
+      const metaIndex = srcdoc.indexOf('Content-Security-Policy')
+      expect(metaIndex).toBeGreaterThan(-1)
+      expect(metaIndex).toBeLessThan(srcdoc.indexOf('<script>'))
     })
   })
 })

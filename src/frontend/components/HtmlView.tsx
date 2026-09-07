@@ -23,22 +23,28 @@ const CSP_META =
 /**
  * Puts the CSP meta as early in the document as possible: a meta-tag policy
  * only governs what comes after it, so it has to precede any element that
- * could start a fetch. Right after <head> when there is one, otherwise right
- * after <html>, otherwise in front of the whole fragment (a bare fragment is
- * what most local .html files hand us anyway).
+ * could start a fetch.
+ *
+ * Deliberately NOT implemented as "find <head> or <html> and insert after
+ * it" — that used a regex scanning the whole (attacker-authored) document
+ * text, and a `<head>`-looking string sitting inside a comment, a <script>
+ * string literal, or an attribute value would match before the real tag,
+ * landing the policy somewhere the browser never parses it (e.g. inside a
+ * comment), silently disabling it while blockRemoteContent is on.
+ *
+ * Only a leading doctype is recognized and skipped (anchored to the very
+ * start, so nothing later in the document can be mistaken for it) so
+ * standards mode is preserved; the meta is prepended right after it, or at
+ * the very start otherwise. The HTML parser's "before html"/"before head"
+ * insertion modes synthesize <html><head> around a leading <meta> and place
+ * it first in <head> regardless of whether the rest of the document already
+ * declares one, so this doesn't require finding — or being foolable by — any
+ * tag search.
  */
 function withContentSecurityPolicy(html: string): string {
-  const headMatch = /<head\b[^>]*>/i.exec(html)
-  if (headMatch) {
-    const at = headMatch.index + headMatch[0].length
-    return html.slice(0, at) + CSP_META + html.slice(at)
-  }
-  const htmlMatch = /<html\b[^>]*>/i.exec(html)
-  if (htmlMatch) {
-    const at = htmlMatch.index + htmlMatch[0].length
-    return `${html.slice(0, at)}<head>${CSP_META}</head>${html.slice(at)}`
-  }
-  return CSP_META + html
+  const doctypeMatch = /^\s*<!doctype[^>]*>/i.exec(html)
+  const at = doctypeMatch ? doctypeMatch[0].length : 0
+  return html.slice(0, at) + CSP_META + html.slice(at)
 }
 
 export function HtmlView({ content, allowScripts, blockRemoteContent }: HtmlViewProps) {
