@@ -52,7 +52,7 @@ export function createApp({
   const authMiddleware = createAuthMiddleware(config)
   app.use('/api', authMiddleware, createRootsRouter(roots))
   app.use('/api', authMiddleware, createFilesRouter(roots, extensions))
-  app.use('/api', authMiddleware, createFileRouter(roots))
+  app.use('/api', authMiddleware, createFileRouter(roots, configDir))
   app.use('/api', authMiddleware, createRenameMkdirRouter(roots))
   app.use('/api', authMiddleware, createAssetRouter(roots))
   app.use('/api', authMiddleware, createSearchRouter(roots, extensions))

@@ -2,12 +2,13 @@ import express from 'express'
 import fs from 'node:fs'
 import { readFile, writeFile, ConflictError } from '../file-store.js'
 import { resolveSafePath, PathSafetyError } from '../path-safety.js'
+import { readSettings } from '../settings.js'
 
 function findRoot(roots, rootId) {
   return roots.find((r) => r.id === Number(rootId))
 }
 
-export function createFileRouter(roots) {
+export function createFileRouter(roots, configDir) {
   const router = express.Router()
 
   router.get('/file', (req, res) => {
@@ -32,11 +33,18 @@ export function createFileRouter(roots) {
     if (!root) return res.status(404).json({ errorCode: 'ROOT_NOT_FOUND' })
 
     try {
-      const { content, mtimeMs, force, backup } = req.body
+      const { content, mtimeMs, force } = req.body
+      // Whether a .bak is kept is a persisted server-side setting the user
+      // configures once, not a per-request client choice: reading it from the
+      // request body let any caller silently skip the backup the user asked
+      // for (or force one they turned off). Any `backup` field in the body is
+      // deliberately ignored — same "settings decide, requests don't" rule the
+      // plantuml proxy follows for effective.sendToPlantUmlServer.
+      const { bakOnSave } = readSettings(configDir)
       const result = writeFile(root.path, req.query.path, content, {
         expectedMtimeMs: mtimeMs,
         force,
-        backup,
+        backup: bakOnSave,
       })
       res.json(result)
     } catch (err) {
