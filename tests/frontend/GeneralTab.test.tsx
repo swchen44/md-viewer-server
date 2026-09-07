@@ -179,6 +179,40 @@ describe('GeneralTab', () => {
         plantumlServerUrl: 'https://plantuml.example.com/final',
       })
     })
+
+    it('keeps typing that happens after a blur-commit, once the settings prop echoes that same commit back', () => {
+      const updateSettings = vi.fn()
+      const { rerender } = render(
+        <GeneralTab
+          settings={baseSettings()}
+          updateSettings={updateSettings}
+          prefs={DEFAULT_LOCAL_PREFS}
+          setPref={() => {}}
+        />
+      )
+      const input = screen.getByLabelText(/plantuml server url/i)
+      fireEvent.change(input, { target: { value: 'https://b.example.com' } })
+      fireEvent.blur(input)
+      expect(updateSettings).toHaveBeenCalledWith({ plantumlServerUrl: 'https://b.example.com' })
+
+      // The user refocuses and keeps typing before the PUT that committed
+      // "https://b.example.com" has round-tripped back into the settings prop.
+      fireEvent.focus(input)
+      fireEvent.change(input, { target: { value: 'https://b.example.com/extra' } })
+
+      // Now the round-trip lands: settings reflects the committed value, which
+      // is just an echo of this component's own blur, not a change from
+      // elsewhere. It must not clobber what was typed since then.
+      rerender(
+        <GeneralTab
+          settings={baseSettings({ plantumlServerUrl: 'https://b.example.com' })}
+          updateSettings={updateSettings}
+          prefs={DEFAULT_LOCAL_PREFS}
+          setPref={() => {}}
+        />
+      )
+      expect(input).toHaveValue('https://b.example.com/extra')
+    })
   })
 
   it('renders nothing crash-worthy when settings is still null (loading)', () => {

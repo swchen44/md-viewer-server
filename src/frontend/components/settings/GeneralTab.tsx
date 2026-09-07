@@ -44,13 +44,32 @@ export function GeneralTab({ settings, updateSettings, prefs, setPref }: General
   // when it changes from OUTSIDE this component (initial null -> loaded
   // transition, or a genuinely external change), without clobbering what the
   // user is actively typing on every render.
+  //
+  // That resync has its own echo hazard, the same one CustomCssTab.tsx's
+  // activeChoice had to guard against: this component's own onBlur fires the
+  // PUT, but `settings.plantumlServerUrl` only updates once that PUT's
+  // response round-trips back. If the user refocuses and keeps typing in that
+  // window, the echo landing would otherwise look like an external change and
+  // clobber the newer keystrokes back to the just-committed value. Unlike
+  // CustomCssTab's enum choice, comparing against the current draft doesn't
+  // work here — free text keeps diverging from the committed value as the
+  // user types further, so "differs from draft" can't distinguish an echo
+  // from a real external change. Tracking focus instead sidesteps the
+  // question entirely: nothing needs resyncing while the user is actively
+  // editing the field, echo or not, since onBlur will pick up whatever is
+  // current the next time it commits anyway. Tracked as state (read during
+  // render below) rather than a ref, since this repo's react-hooks/refs lint
+  // rule disallows reading a ref's value during render.
+  const [plantumlUrlFocused, setPlantumlUrlFocused] = useState(false)
   const [plantumlUrlDraft, setPlantumlUrlDraft] = useState(settings?.plantumlServerUrl ?? '')
   const [prevSettingsUrl, setPrevSettingsUrl] = useState<string | null>(
     settings?.plantumlServerUrl ?? null
   )
   if (settings && settings.plantumlServerUrl !== prevSettingsUrl) {
     setPrevSettingsUrl(settings.plantumlServerUrl)
-    setPlantumlUrlDraft(settings.plantumlServerUrl)
+    if (!plantumlUrlFocused) {
+      setPlantumlUrlDraft(settings.plantumlServerUrl)
+    }
   }
 
   return (
@@ -143,7 +162,11 @@ export function GeneralTab({ settings, updateSettings, prefs, setPref }: General
                 type="text"
                 value={plantumlUrlDraft}
                 onChange={(e) => setPlantumlUrlDraft(e.target.value)}
-                onBlur={() => applySetting({ plantumlServerUrl: plantumlUrlDraft })}
+                onFocus={() => setPlantumlUrlFocused(true)}
+                onBlur={() => {
+                  setPlantumlUrlFocused(false)
+                  applySetting({ plantumlServerUrl: plantumlUrlDraft })
+                }}
               />
             </label>
             <label>
