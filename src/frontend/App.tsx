@@ -14,6 +14,7 @@ import { SettingsModal } from './components/SettingsModal.js'
 import { useDraft } from './hooks/useDraft.js'
 import { useSettings } from './hooks/useSettings.js'
 import { useLocalPrefs } from './hooks/useLocalPrefs.js'
+import { resolveEffectiveCustomCss } from './custom-css-presets.js'
 
 interface Conflict {
   tabId: string
@@ -58,6 +59,11 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const { settings, updateSettings } = useSettings()
   const { prefs, setPref } = useLocalPrefs()
+  // The effective CSS content is derived straight from backend-persisted
+  // `settings` (customCssChoice/customCssUser1/customCssUser2) rather than a
+  // localStorage-based draft — Task 8 moved Custom CSS choice/content
+  // storage server-side, so there's nothing left for App.tsx to stage itself.
+  const effectiveCustomCss = resolveEffectiveCustomCss(settings)
 
   // 'system' removes the attribute entirely so the existing
   // prefers-color-scheme CSS media query decides; 'light'/'dark' set it
@@ -492,6 +498,7 @@ export function App() {
 
   return (
     <div data-testid="app-shell" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <style data-testid="custom-css-style">{effectiveCustomCss}</style>
       <TopBar onOpenSettings={() => setSettingsOpen(true)} />
       <SettingsModal
         open={settingsOpen}

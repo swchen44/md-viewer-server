@@ -59,7 +59,13 @@
     "themeSystem": "시스템 설정 따름",
     "accentColor": "강조 색상",
     "editorFontSize": "편집기 글꼴 크기",
-    "editorIndentWidth": "편집기 들여쓰기 너비"
+    "editorIndentWidth": "편집기 들여쓰기 너비",
+    "cssChoiceEditorial": "에디토리얼 (읽기 전용)",
+    "cssChoiceDeveloper": "개발자 (읽기 전용)",
+    "cssChoiceUser1": "사용자 1",
+    "cssChoiceUser2": "사용자 2",
+    "cssApply": "적용",
+    "cssReadonlyHint": "내장 프리셋은 읽기 전용입니다. 사용자 1 또는 사용자 2를 선택하여 직접 CSS를 작성하세요."
   },
   "topBar": {
     "settingsLabel": "설정"

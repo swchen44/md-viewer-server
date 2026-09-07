@@ -59,7 +59,13 @@
     "themeSystem": "跟隨系統",
     "accentColor": "主色調",
     "editorFontSize": "編輯器字型大小",
-    "editorIndentWidth": "編輯器縮排寬度"
+    "editorIndentWidth": "編輯器縮排寬度",
+    "cssChoiceEditorial": "文藝風(唯讀)",
+    "cssChoiceDeveloper": "開發者風(唯讀)",
+    "cssChoiceUser1": "使用者 1",
+    "cssChoiceUser2": "使用者 2",
+    "cssApply": "套用",
+    "cssReadonlyHint": "內建範本為唯讀。請選擇使用者 1 或使用者 2 以撰寫您自己的 CSS。"
   },
   "topBar": {
     "settingsLabel": "設定"

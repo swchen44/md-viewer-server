@@ -59,7 +59,13 @@
     "themeSystem": "System",
     "accentColor": "Accent color",
     "editorFontSize": "Editor font size",
-    "editorIndentWidth": "Editor indent width"
+    "editorIndentWidth": "Editor indent width",
+    "cssChoiceEditorial": "Editorial (readonly)",
+    "cssChoiceDeveloper": "Developer (readonly)",
+    "cssChoiceUser1": "User 1",
+    "cssChoiceUser2": "User 2",
+    "cssApply": "Apply",
+    "cssReadonlyHint": "Built-in presets are readonly. Select User 1 or User 2 to write your own CSS."
   },
   "topBar": {
     "settingsLabel": "Settings"

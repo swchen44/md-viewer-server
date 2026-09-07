@@ -4,6 +4,7 @@ import type { Settings } from '../hooks/useSettings.js'
 import { DEFAULT_LOCAL_PREFS, type LocalPrefs } from '../hooks/useLocalPrefs.js'
 import { GeneralTab } from './settings/GeneralTab.js'
 import { AppearanceTab } from './settings/AppearanceTab.js'
+import { CustomCssTab } from './settings/CustomCssTab.js'
 
 type Category = 'general' | 'appearance' | 'customCss'
 
@@ -47,7 +48,7 @@ export function SettingsModal({
           <GeneralTab settings={settings} updateSettings={updateSettings} prefs={prefs} setPref={setPref} />
         )}
         {category === 'appearance' && <AppearanceTab prefs={prefs} setPref={setPref} />}
-        {/* Task 8 replaces this with CustomCssTab based on `category` */}
+        {category === 'customCss' && <CustomCssTab settings={settings} updateSettings={updateSettings} />}
       </div>
       <button aria-label="close" onClick={onClose}>
         ×

@@ -59,7 +59,13 @@
     "themeSystem": "跟随系统",
     "accentColor": "主色调",
     "editorFontSize": "编辑器字体大小",
-    "editorIndentWidth": "编辑器缩进宽度"
+    "editorIndentWidth": "编辑器缩进宽度",
+    "cssChoiceEditorial": "文艺风(只读)",
+    "cssChoiceDeveloper": "开发者风(只读)",
+    "cssChoiceUser1": "用户 1",
+    "cssChoiceUser2": "用户 2",
+    "cssApply": "应用",
+    "cssReadonlyHint": "内置模板为只读。请选择用户 1 或用户 2 来编写您自己的 CSS。"
   },
   "topBar": {
     "settingsLabel": "设置"
