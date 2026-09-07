@@ -65,7 +65,8 @@
     "cssChoiceUser1": "User 1",
     "cssChoiceUser2": "User 2",
     "cssApply": "Apply",
-    "cssReadonlyHint": "Built-in presets are readonly. Select User 1 or User 2 to write your own CSS."
+    "cssReadonlyHint": "Built-in presets are readonly. Select User 1 or User 2 to write your own CSS.",
+    "closeLabel": "Close"
   },
   "topBar": {
     "settingsLabel": "Settings"

@@ -65,7 +65,8 @@
     "cssChoiceUser1": "사용자 1",
     "cssChoiceUser2": "사용자 2",
     "cssApply": "적용",
-    "cssReadonlyHint": "내장 프리셋은 읽기 전용입니다. 사용자 1 또는 사용자 2를 선택하여 직접 CSS를 작성하세요."
+    "cssReadonlyHint": "내장 프리셋은 읽기 전용입니다. 사용자 1 또는 사용자 2를 선택하여 직접 CSS를 작성하세요.",
+    "closeLabel": "닫기"
   },
   "topBar": {
     "settingsLabel": "설정"

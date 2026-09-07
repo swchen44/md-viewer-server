@@ -65,7 +65,8 @@
     "cssChoiceUser1": "用户 1",
     "cssChoiceUser2": "用户 2",
     "cssApply": "应用",
-    "cssReadonlyHint": "内置模板为只读。请选择用户 1 或用户 2 来编写您自己的 CSS。"
+    "cssReadonlyHint": "内置模板为只读。请选择用户 1 或用户 2 来编写您自己的 CSS。",
+    "closeLabel": "关闭"
   },
   "topBar": {
     "settingsLabel": "设置"

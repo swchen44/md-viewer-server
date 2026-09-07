@@ -65,7 +65,8 @@
     "cssChoiceUser1": "ユーザー 1",
     "cssChoiceUser2": "ユーザー 2",
     "cssApply": "適用",
-    "cssReadonlyHint": "組み込みプリセットは読み取り専用です。ユーザー 1 またはユーザー 2 を選択して独自の CSS を記述してください。"
+    "cssReadonlyHint": "組み込みプリセットは読み取り専用です。ユーザー 1 またはユーザー 2 を選択して独自の CSS を記述してください。",
+    "closeLabel": "閉じる"
   },
   "topBar": {
     "settingsLabel": "設定"

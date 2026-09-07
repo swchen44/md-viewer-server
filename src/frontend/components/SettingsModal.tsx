@@ -50,7 +50,7 @@ export function SettingsModal({
         {category === 'appearance' && <AppearanceTab prefs={prefs} setPref={setPref} />}
         {category === 'customCss' && <CustomCssTab settings={settings} updateSettings={updateSettings} />}
       </div>
-      <button aria-label="close" onClick={onClose}>
+      <button aria-label={t('settings.closeLabel', 'Close')} onClick={onClose}>
         ×
       </button>
     </div>
