@@ -60,6 +60,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [pathModalOpen, setPathModalOpen] = useState(false)
   const [currentPath, setCurrentPath] = useState<string | null>(null)
+  const [updateAvailable, setUpdateAvailable] = useState<{ latestVersion: string } | null>(null)
   const { settings, updateSettings } = useSettings()
   const { prefs, setPref } = useLocalPrefs()
   // The effective CSS content is derived straight from backend-persisted
@@ -120,6 +121,25 @@ export function App() {
         console.error('Failed to load /api/roots', err)
         setRoots([])
         setRootsError('Failed to load folders.')
+      })
+  }, [])
+
+  // One-shot, opt-in version check (checkForUpdates setting; see version-check.js
+  // on the backend). GET /api/version-check itself is quiet when the setting is
+  // off ({enabled: false}, no outbound request made server-side), and any
+  // failure here (network error, non-JSON body) is swallowed silently — a
+  // failed update check must never surface as an error to the user, it should
+  // just mean no hint is shown.
+  useEffect(() => {
+    apiFetch('/api/version-check')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.enabled && data.updateAvailable && data.latestVersion) {
+          setUpdateAvailable({ latestVersion: data.latestVersion })
+        }
+      })
+      .catch(() => {
+        // Quiet by default — see comment above.
       })
   }, [])
 
@@ -538,6 +558,7 @@ export function App() {
         onFullscreen={handleFullscreen}
         onShowPath={handleShowPath}
         onPrint={handlePrint}
+        updateAvailable={updateAvailable}
       />
       <SettingsModal
         open={settingsOpen}

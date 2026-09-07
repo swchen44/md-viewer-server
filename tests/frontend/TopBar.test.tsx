@@ -34,4 +34,22 @@ describe('TopBar', () => {
     expect(onShowPath).toHaveBeenCalledOnce()
     expect(onPrint).toHaveBeenCalledOnce()
   })
+
+  it('shows an update hint when updateAvailable is provided', () => {
+    render(
+      <TopBar
+        onOpenSettings={() => {}}
+        onFullscreen={() => {}}
+        onShowPath={() => {}}
+        onPrint={() => {}}
+        updateAvailable={{ latestVersion: '9.9.9' }}
+      />
+    )
+    expect(screen.getByText(/9\.9\.9/)).toBeInTheDocument()
+  })
+
+  it('shows nothing when updateAvailable is null/undefined', () => {
+    render(<TopBar onOpenSettings={() => {}} onFullscreen={() => {}} onShowPath={() => {}} onPrint={() => {}} />)
+    expect(screen.queryByText(/update available/i)).not.toBeInTheDocument()
+  })
 })

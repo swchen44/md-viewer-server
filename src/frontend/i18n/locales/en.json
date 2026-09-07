@@ -73,7 +73,8 @@
     "settingsLabel": "Settings",
     "fullscreenLabel": "Fullscreen",
     "showPathLabel": "Show path",
-    "printLabel": "Print"
+    "printLabel": "Print",
+    "updateAvailable": "Update available: {{version}}"
   },
   "pathModal": {
     "ariaLabel": "File path",

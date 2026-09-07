@@ -97,6 +97,19 @@ describe('App show-path wiring', () => {
   })
 })
 
+describe('App version-check wiring', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('shows the update-available hint reported by GET /api/version-check on mount', async () => {
+    stubRoutedFetch([
+      { match: '/api/roots', response: [{ id: 0, name: 'proj' }] },
+      { match: '/api/version-check', response: { enabled: true, updateAvailable: true, latestVersion: '9.9.9' } },
+    ])
+    render(<App />)
+    await waitFor(() => expect(screen.getByText(/9\.9\.9/)).toBeInTheDocument())
+  })
+})
+
 describe('App roots error handling', () => {
   afterEach(() => vi.unstubAllGlobals())
 

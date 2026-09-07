@@ -73,7 +73,8 @@
     "settingsLabel": "設定",
     "fullscreenLabel": "全画面表示",
     "showPathLabel": "パスを表示",
-    "printLabel": "印刷"
+    "printLabel": "印刷",
+    "updateAvailable": "新しいバージョンが利用可能です: {{version}}"
   },
   "pathModal": {
     "ariaLabel": "ファイルのパス",

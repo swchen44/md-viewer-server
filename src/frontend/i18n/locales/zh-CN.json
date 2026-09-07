@@ -73,7 +73,8 @@
     "settingsLabel": "设置",
     "fullscreenLabel": "全屏",
     "showPathLabel": "显示路径",
-    "printLabel": "打印"
+    "printLabel": "打印",
+    "updateAvailable": "有新版本可用：{{version}}"
   },
   "pathModal": {
     "ariaLabel": "文件路径",

@@ -73,7 +73,8 @@
     "settingsLabel": "設定",
     "fullscreenLabel": "全螢幕",
     "showPathLabel": "顯示路徑",
-    "printLabel": "列印"
+    "printLabel": "列印",
+    "updateAvailable": "有新版本可用：{{version}}"
   },
   "pathModal": {
     "ariaLabel": "檔案路徑",

@@ -73,7 +73,8 @@
     "settingsLabel": "설정",
     "fullscreenLabel": "전체 화면",
     "showPathLabel": "경로 표시",
-    "printLabel": "인쇄"
+    "printLabel": "인쇄",
+    "updateAvailable": "업데이트 가능: {{version}}"
   },
   "pathModal": {
     "ariaLabel": "파일 경로",
