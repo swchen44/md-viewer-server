@@ -5,6 +5,7 @@ import { createAuthMiddleware } from './auth-middleware.js'
 import { createRootsRouter } from './api/roots.js'
 import { createFilesRouter } from './api/files.js'
 import { createFileRouter } from './api/file.js'
+import { createFilePathRouter } from './api/file-path.js'
 import { createRenameMkdirRouter } from './api/rename-mkdir.js'
 import { createAssetRouter } from './api/asset.js'
 import { createSearchRouter } from './api/search.js'
@@ -53,6 +54,7 @@ export function createApp({
   app.use('/api', authMiddleware, createRootsRouter(roots))
   app.use('/api', authMiddleware, createFilesRouter(roots, extensions))
   app.use('/api', authMiddleware, createFileRouter(roots, configDir))
+  app.use('/api', authMiddleware, createFilePathRouter(roots))
   app.use('/api', authMiddleware, createRenameMkdirRouter(roots))
   app.use('/api', authMiddleware, createAssetRouter(roots))
   app.use('/api', authMiddleware, createSearchRouter(roots, extensions))
