@@ -143,6 +143,44 @@ describe('GeneralTab', () => {
     expect(updateSettings).not.toHaveBeenCalled()
   })
 
+  describe('PlantUML server URL field commits on blur, not on every keystroke', () => {
+    it('typing without blurring does not call updateSettings', () => {
+      const updateSettings = vi.fn()
+      render(
+        <GeneralTab
+          settings={baseSettings()}
+          updateSettings={updateSettings}
+          prefs={DEFAULT_LOCAL_PREFS}
+          setPref={() => {}}
+        />
+      )
+      const input = screen.getByLabelText(/plantuml server url/i)
+      fireEvent.change(input, { target: { value: 'https://plantuml.example.com' } })
+      fireEvent.change(input, { target: { value: 'https://plantuml.example.com/x' } })
+      expect(updateSettings).not.toHaveBeenCalled()
+    })
+
+    it('blurring after typing calls updateSettings exactly once with the final value', () => {
+      const updateSettings = vi.fn()
+      render(
+        <GeneralTab
+          settings={baseSettings()}
+          updateSettings={updateSettings}
+          prefs={DEFAULT_LOCAL_PREFS}
+          setPref={() => {}}
+        />
+      )
+      const input = screen.getByLabelText(/plantuml server url/i)
+      fireEvent.change(input, { target: { value: 'https://plantuml.example.com' } })
+      fireEvent.change(input, { target: { value: 'https://plantuml.example.com/final' } })
+      fireEvent.blur(input)
+      expect(updateSettings).toHaveBeenCalledTimes(1)
+      expect(updateSettings).toHaveBeenCalledWith({
+        plantumlServerUrl: 'https://plantuml.example.com/final',
+      })
+    })
+  })
+
   it('renders nothing crash-worthy when settings is still null (loading)', () => {
     expect(() =>
       render(

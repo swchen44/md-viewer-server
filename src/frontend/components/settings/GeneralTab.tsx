@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Settings } from '../../hooks/useSettings.js'
 import type { LocalPrefs } from '../../hooks/useLocalPrefs.js'
+import { applySettingsPatch } from './apply-settings-patch.js'
 
 interface GeneralTabProps {
   settings: Settings | null
@@ -22,15 +24,33 @@ export function GeneralTab({ settings, updateSettings, prefs, setPref }: General
   // the raw one once unlocked, where it is what actually applies again.
   // Display only: nothing here rewrites the stored value.
 
-  // updateSettings (useSettings.ts) does its own PUT and does not itself
-  // catch a network-level fetch rejection — it's a fire-and-forget call from
-  // these onChange handlers (nothing here awaits it, matching how a simple
-  // checkbox toggle is handled elsewhere in this codebase), so a dropped
-  // connection must not surface as an unhandled promise rejection. The
-  // hook already tracks/exposes its own `error` state for a real failure;
-  // this swallow only prevents the rejection from going unhandled.
+  // Fire-and-forget PUT wrapper — see apply-settings-patch.ts for why this is
+  // needed (shared with CustomCssTab.tsx).
   function applySetting(patch: Partial<Settings>) {
-    Promise.resolve(updateSettings(patch)).catch(() => {})
+    applySettingsPatch(updateSettings, patch)
+  }
+
+  // The PlantUML server URL field is free text, so every keystroke can be an
+  // incomplete/invalid URL (e.g. "https://" while typing the host). Committing
+  // on every onChange would fire a PUT per keystroke, each one liable to fail
+  // `assertValidPlantUmlServerUrl` server-side and write config.json for
+  // nothing. So the visible value is local state, and only onBlur commits it.
+  //
+  // Adjust state during render (React's documented pattern for resetting
+  // state when a prop changes, used the same way in OutlinePanel.tsx's
+  // `prevActiveTab` and CustomCssTab.tsx's `prevSettingsChoice`) rather than
+  // in a useEffect, which this repo's react-hooks/set-state-in-effect lint
+  // rule flags. This keeps the field in sync with `settings.plantumlServerUrl`
+  // when it changes from OUTSIDE this component (initial null -> loaded
+  // transition, or a genuinely external change), without clobbering what the
+  // user is actively typing on every render.
+  const [plantumlUrlDraft, setPlantumlUrlDraft] = useState(settings?.plantumlServerUrl ?? '')
+  const [prevSettingsUrl, setPrevSettingsUrl] = useState<string | null>(
+    settings?.plantumlServerUrl ?? null
+  )
+  if (settings && settings.plantumlServerUrl !== prevSettingsUrl) {
+    setPrevSettingsUrl(settings.plantumlServerUrl)
+    setPlantumlUrlDraft(settings.plantumlServerUrl)
   }
 
   return (
@@ -121,8 +141,9 @@ export function GeneralTab({ settings, updateSettings, prefs, setPref }: General
               {t('settings.plantumlServerUrl', 'PlantUML server URL')}
               <input
                 type="text"
-                value={settings.plantumlServerUrl}
-                onChange={(e) => applySetting({ plantumlServerUrl: e.target.value })}
+                value={plantumlUrlDraft}
+                onChange={(e) => setPlantumlUrlDraft(e.target.value)}
+                onBlur={() => applySetting({ plantumlServerUrl: plantumlUrlDraft })}
               />
             </label>
             <label>
