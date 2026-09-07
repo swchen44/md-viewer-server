@@ -32,14 +32,13 @@ See `docs/superpowers/specs/2026-09-05-md-viewer-server-design.md` for the full 
 
 When executing the implementation plan, pause after each completed UI-facing segment (e.g. one panel, one view mode, one settings tab) and present it to the user for acceptance before starting the next segment. The user may not be at the keyboard continuously: schedule a wakeup roughly 3 minutes out; if there's no response by then, treat the segment as accepted and continue to the next one. Non-UI backend segments (API endpoints, daemon logic) don't need this checkpoint — only pause where a human needs to actually look at something.
 
-## Code review and plan review: Codex is back on trial
+## Code review and plan review: no automated review gate right now — trialing manual Codex review
 
-Codex was banned from review earlier in this project's history (`/codex:review`/`/codex:adversarial-review` repeatedly hung for long stretches, stuck on an environment-side command unrelated to the diff being reviewed, wasting significant time across multiple sessions). The user has since asked to try it again to see whether it still hangs — so it's back in rotation, but on a short leash:
+`/codex:review` and `/codex:adversarial-review` turn out to be restricted to direct user invocation only (`disable-model-invocation: true` in the plugin's own command definitions) — Claude Code cannot call them itself, and is explicitly told not to replicate their workflow by other means (e.g. shelling out to the Codex CLI directly, or editing the plugin's own files to lift that restriction — don't do either of those).
 
-- Give a Codex review command a bounded amount of time to respond. If it hangs the way it did before (stuck with no progress for a long stretch), stop waiting on it, fall back to dispatching a Claude reviewer subagent (sonnet/opus) against the same review package instead, and tell the user it hung again.
-- If Codex completes normally, its findings are used the same way a Claude reviewer subagent's findings would be.
+Given that, the user's current instruction is: **do not dispatch a review step (neither a Claude reviewer subagent nor anything else) after each task's implementation for the time being.** Implement each task, verify it (tests/lint/typecheck/build), commit, and move on — no review-gate pause. The user will periodically run `/codex:review` (or `/codex:adversarial-review`) themselves, on their own schedule, against whatever commit range they choose, to see whether Codex still hangs the way it used to.
 
-Whichever path is used, the flow is otherwise the original subagent-driven-development one: after a task's implementer reports back, generate the review package (`scripts/review-package <prev-commit> <new-commit>`), get it reviewed (Codex first, Claude sonnet/opus reviewer subagent as fallback or default), and if Critical/Important findings come back, dispatch a fix via a Claude sonnet/opus subagent (never haiku — this applies regardless of which review path found the issue).
+This is a deliberate, temporary trial (goal: reduce token spend from dispatching a full reviewer subagent per task) — not a quality-bar change. If the user says to turn the review-gate back on, or to go back to dispatching Claude reviewer subagents per task, revert to that. Earlier context for why Codex was banned in the first place: it repeatedly hung for long stretches (stuck on an environment-side command unrelated to the diff being reviewed) during real use in this project.
 
 ## Watch for orphaned `vitest` worker processes
 
