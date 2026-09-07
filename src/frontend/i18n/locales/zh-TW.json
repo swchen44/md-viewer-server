@@ -69,6 +69,16 @@
     "closeLabel": "關閉"
   },
   "topBar": {
-    "settingsLabel": "設定"
+    "settingsLabel": "設定",
+    "fullscreenLabel": "全螢幕",
+    "showPathLabel": "顯示路徑",
+    "printLabel": "列印"
+  },
+  "pathModal": {
+    "ariaLabel": "檔案路徑",
+    "copy": "複製",
+    "copied": "已複製",
+    "copyFailed": "複製失敗",
+    "noFileOpen": "尚未開啟檔案"
   }
 }

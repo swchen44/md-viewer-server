@@ -63,6 +63,40 @@ describe('App layout', () => {
   })
 })
 
+describe('App show-path wiring', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('clicking "show path" with an active tab fetches GET /api/file-path and shows the returned path in a modal', async () => {
+    const fetchMock = stubRoutedFetch([
+      { match: '/api/roots', response: [{ id: 0, name: 'proj' }] },
+      { match: '/api/files', response: { files: [{ relPath: 'a.md', size: 5, mtimeMs: 1 }] } },
+      { match: '/api/file?', response: { content: '# Hi', mtimeMs: 1, encoding: 'utf-8' } },
+      { match: '/api/file-path', response: { absolutePath: '/srv/proj/a.md' } },
+    ])
+    render(<App />)
+    await waitFor(() => screen.getByText('a.md'))
+    fireEvent.click(screen.getByText('a.md'))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Hi' })).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: /show path/i }))
+
+    await waitFor(() => expect(screen.getByRole('dialog', { name: /path/i })).toBeInTheDocument())
+    expect(screen.getByText('/srv/proj/a.md')).toBeInTheDocument()
+
+    const filePathCall = fetchMock.mock.calls.find(([url]) => String(url).includes('/api/file-path'))
+    expect(filePathCall).toBeTruthy()
+    expect(String(filePathCall![0])).toContain('root=0')
+    expect(String(filePathCall![0])).toContain('path=a.md')
+  })
+
+  it('clicking "show path" with no active tab does nothing (no modal, no fetch)', () => {
+    stubRootsFetch()
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: /show path/i }))
+    expect(screen.queryByRole('dialog', { name: /path/i })).not.toBeInTheDocument()
+  })
+})
+
 describe('App roots error handling', () => {
   afterEach(() => vi.unstubAllGlobals())
 

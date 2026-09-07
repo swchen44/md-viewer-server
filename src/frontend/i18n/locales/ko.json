@@ -69,6 +69,16 @@
     "closeLabel": "닫기"
   },
   "topBar": {
-    "settingsLabel": "설정"
+    "settingsLabel": "설정",
+    "fullscreenLabel": "전체 화면",
+    "showPathLabel": "경로 표시",
+    "printLabel": "인쇄"
+  },
+  "pathModal": {
+    "ariaLabel": "파일 경로",
+    "copy": "복사",
+    "copied": "복사됨",
+    "copyFailed": "복사 실패",
+    "noFileOpen": "열린 파일 없음"
   }
 }

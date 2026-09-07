@@ -11,6 +11,7 @@ import { SearchBar, type FilesSearchOptions, type OutlineSearchOptions } from '.
 import { TabContent } from './components/TabContent.js'
 import { ConflictDialog } from './components/ConflictDialog.js'
 import { SettingsModal } from './components/SettingsModal.js'
+import { PathModal } from './components/PathModal.js'
 import { useDraft } from './hooks/useDraft.js'
 import { useSettings } from './hooks/useSettings.js'
 import { useLocalPrefs } from './hooks/useLocalPrefs.js'
@@ -57,6 +58,8 @@ export function App() {
   const [conflict, setConflict] = useState<Conflict | null>(null)
   const [saveError, setSaveError] = useState<SaveError | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [pathModalOpen, setPathModalOpen] = useState(false)
+  const [currentPath, setCurrentPath] = useState<string | null>(null)
   const { settings, updateSettings } = useSettings()
   const { prefs, setPref } = useLocalPrefs()
   // The effective CSS content is derived straight from backend-persisted
@@ -496,10 +499,46 @@ export function App() {
     setOutlineSearchFilter(query.trim() ? { query, regex: options.regex } : null)
   }
 
+  async function handleShowPath() {
+    // No active tab means there's nothing to show a path for — TopBar's
+    // onShowPath is unconditional, so the caller-side decision of "should
+    // this even do anything" lives here.
+    if (!activeTab) return
+    const res = await apiFetch(`/api/file-path?root=${activeTab.rootId}&path=${encodeURIComponent(activeTab.relPath)}`)
+    if (!res.ok) {
+      console.error('Failed to load /api/file-path', res.status)
+      return
+    }
+    const data = await res.json()
+    setCurrentPath(data.absolutePath)
+    setPathModalOpen(true)
+  }
+
+  function handleFullscreen() {
+    if (document.fullscreenElement) {
+      document.exitFullscreen()
+    } else {
+      document.documentElement.requestFullscreen().catch(() => {
+        // Fullscreen can be denied (e.g. no user gesture, or the browser/
+        // embedding context disallows it) — silently ignore, there's no
+        // useful recovery action to offer here.
+      })
+    }
+  }
+
+  function handlePrint() {
+    window.print()
+  }
+
   return (
     <div data-testid="app-shell" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <style data-testid="custom-css-style">{effectiveCustomCss}</style>
-      <TopBar onOpenSettings={() => setSettingsOpen(true)} />
+      <TopBar
+        onOpenSettings={() => setSettingsOpen(true)}
+        onFullscreen={handleFullscreen}
+        onShowPath={handleShowPath}
+        onPrint={handlePrint}
+      />
       <SettingsModal
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
@@ -508,6 +547,7 @@ export function App() {
         prefs={prefs}
         setPref={setPref}
       />
+      <PathModal open={pathModalOpen} path={currentPath} onClose={() => setPathModalOpen(false)} />
       {rootsError && (
         <div data-testid="roots-error" role="alert" style={{ padding: '4px 12px', color: '#b00020' }}>
           {rootsError}

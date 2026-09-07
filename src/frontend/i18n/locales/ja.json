@@ -69,6 +69,16 @@
     "closeLabel": "閉じる"
   },
   "topBar": {
-    "settingsLabel": "設定"
+    "settingsLabel": "設定",
+    "fullscreenLabel": "全画面表示",
+    "showPathLabel": "パスを表示",
+    "printLabel": "印刷"
+  },
+  "pathModal": {
+    "ariaLabel": "ファイルのパス",
+    "copy": "コピー",
+    "copied": "コピーしました",
+    "copyFailed": "コピーに失敗しました",
+    "noFileOpen": "ファイルが開かれていません"
   }
 }

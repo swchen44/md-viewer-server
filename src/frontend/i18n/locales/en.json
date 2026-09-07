@@ -69,6 +69,16 @@
     "closeLabel": "Close"
   },
   "topBar": {
-    "settingsLabel": "Settings"
+    "settingsLabel": "Settings",
+    "fullscreenLabel": "Fullscreen",
+    "showPathLabel": "Show path",
+    "printLabel": "Print"
+  },
+  "pathModal": {
+    "ariaLabel": "File path",
+    "copy": "Copy",
+    "copied": "Copied",
+    "copyFailed": "Copy failed",
+    "noFileOpen": "No file open"
   }
 }
