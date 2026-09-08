@@ -28,7 +28,8 @@
     "loading": "Loading...",
     "loadError": "Failed to load this file",
     "tooLarge": "This file is too large to render or edit.",
-    "nonUtf8Encoding": "Non-UTF-8 encoding — view only"
+    "nonUtf8Encoding": "Non-UTF-8 encoding — view only",
+    "fileDeleted": "This file no longer exists on disk — view only"
   },
   "plantumlView": {
     "disabledHint": "Enable \"Send diagram source to PlantUML server\" in Settings and specify a server to render this diagram.",

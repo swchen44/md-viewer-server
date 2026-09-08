@@ -152,7 +152,42 @@ export function App() {
       })
   }, [])
 
-  function closeTab(id: string) {
+  // Best-effort mirror of a local tab open/close into the daemon's shared
+  // open-tabs registry (src/server/open-tabs.js), so `mvs tabs` / `mvs close`
+  // and any other connected browser can see what this one has open.
+  //
+  // Deliberately fire-and-forget: the local tab list updates immediately and
+  // never waits on this round-trip, because a slow or dead daemon connection
+  // must not make clicking a file in the sidebar feel laggy. A failure is a
+  // loss of CLI visibility, not of the user's work, so it is logged and
+  // otherwise ignored — no error banner, unlike the save flow.
+  function syncTabToDaemon(method: 'POST' | 'DELETE', rootId: number, relPath: string) {
+    apiFetch('/api/tabs', {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ root: rootId, path: relPath }),
+    })
+      .then((res) => {
+        if (!res.ok) console.warn('Tab sync rejected by the daemon', method, res.status)
+      })
+      .catch((err) => {
+        console.warn('Failed to sync tab state to the daemon', err)
+      })
+  }
+
+  // `syncToDaemon` distinguishes a LOCAL user action (default: tell the daemon,
+  // so other clients learn about it) from applying a tab-closed event that
+  // ALREADY came from the daemon. Without that distinction the DELETE issued
+  // here would make the daemon broadcast tab-closed again to every client
+  // including this one, which would apply it and DELETE again — an endless
+  // echo loop off a single click. Same reasoning as openFile below.
+  function closeTab(id: string, syncToDaemon = true) {
+    // Read from tabsRef, not `tabs`: this also runs from the long-lived
+    // WebSocket handler, where the captured `tabs` may be a stale render's.
+    const closing = tabsRef.current.find((t) => t.id === id)
+    if (syncToDaemon && closing) {
+      syncTabToDaemon('DELETE', closing.rootId, closing.relPath)
+    }
     setTabs((prev) => prev.filter((t) => t.id !== id))
     setActiveTabId((prev) => (prev === id ? null : prev))
     // A pending conflict belongs to the save attempt that raised it, not to
@@ -478,18 +513,40 @@ export function App() {
     console.log('jump to heading', line)
   }
 
-  function openFile(rootId: number, relPath: string) {
-    const existing = tabs.find((t) => t.rootId === rootId && t.relPath === relPath)
-    if (existing) {
-      setActiveTabId(existing.id)
-      return
-    }
+  // `syncToDaemon` marks who triggered this open. A local user action (the
+  // default — clicking a file in the sidebar) POSTs to /api/tabs so the CLI
+  // and other browsers see the tab. Applying an incoming tab-opened event
+  // passes false: that event IS the daemon's broadcast of an open, so POSTing
+  // in response would have the daemon broadcast tab-opened again to every
+  // client including this one, which would open it again and POST again —
+  // a broadcast echo loop. Only a genuinely local action may talk to the API.
+  function openFile(rootId: number, relPath: string, syncToDaemon = true) {
+    // Tab ids are deterministic (`${rootId}:${relPath}`), so "is this file
+    // already open" is an id lookup. tabsRef rather than `tabs` for the same
+    // reason as closeTab: this also runs from the WebSocket handler.
     const id = `${rootId}:${relPath}`
-    const title = relPath.split('/').pop() ?? relPath
-    setTabs((prev) => [
-      ...prev,
-      { id, rootId, relPath, title, dirty: false, content: null, mtimeMs: null, encoding: 'utf-8', mode: 'view' },
-    ])
+    const alreadyOpen = tabsRef.current.some((t) => t.id === id)
+    if (!alreadyOpen) {
+      const title = relPath.split('/').pop() ?? relPath
+      // The duplicate check is repeated inside the updater because two events
+      // for the same file can arrive in one tick, before tabsRef has caught
+      // up with a re-render — appending twice would produce two tabs sharing
+      // one id (duplicate React keys, and a close that only closes one).
+      setTabs((prev) =>
+        prev.some((t) => t.id === id)
+          ? prev
+          : [
+              ...prev,
+              { id, rootId, relPath, title, dirty: false, content: null, mtimeMs: null, encoding: 'utf-8', mode: 'view' },
+            ]
+      )
+      if (syncToDaemon) syncTabToDaemon('POST', rootId, relPath)
+    }
+    // Focus the tab either way — for a remote open this is the visible effect
+    // of `mvs open`, and for a local click on an already-open file it is the
+    // pre-existing behavior. An already-open file is deliberately NOT re-POSTed:
+    // the daemon already has it, and re-broadcasting would pull every other
+    // client's focus around just because this user clicked a tab.
     setActiveTabId(id)
   }
 
@@ -558,12 +615,78 @@ export function App() {
     reloadTabContent(tab.id, rootId, relPath)
   }
 
+  // file-removed handler. Beyond refreshing the tree, a tab still showing the
+  // deleted file must stop offering Edit/Split: saving would silently recreate
+  // a file that was deliberately deleted (by a `rm`, a branch switch, another
+  // tool), from content that is by then arbitrarily stale. The tab stays open
+  // with its last-loaded content on purpose — that content may be the only
+  // remaining copy in front of the user, so auto-closing would be the
+  // destructive choice. This is the same "view only" posture non-UTF-8 files
+  // already use (see TabContent's effectiveMode and the mode-toggle render
+  // below), not a new mechanism.
+  function handleFileRemoved(rootId: number, relPath: string) {
+    setTabs((prev) =>
+      prev.some((t) => t.rootId === rootId && t.relPath === relPath)
+        ? prev.map((t) => (t.rootId === rootId && t.relPath === relPath ? { ...t, readOnly: true } : t))
+        : prev
+    )
+    refreshFileTree()
+  }
+
+  // file-added handler. Lifts the read-only mark above when the same file
+  // comes back: editors that save atomically (write a temp file, rename it
+  // over the target) surface as remove-then-add, so without this a single
+  // external save from vim/VS Code would permanently lock an open tab into
+  // view-only with no way back short of closing and reopening it.
+  function handleFileAdded(rootId: number, relPath: string) {
+    setTabs((prev) =>
+      prev.some((t) => t.rootId === rootId && t.relPath === relPath && t.readOnly)
+        ? prev.map((t) => (t.rootId === rootId && t.relPath === relPath ? { ...t, readOnly: false } : t))
+        : prev
+    )
+    refreshFileTree()
+  }
+
+  // tab-opened handler: another client opened this file — a `mvs open` from
+  // the CLI, or a second browser. Reuse the exact same local open logic, with
+  // syncToDaemon=false so this does not bounce straight back to the API (see
+  // openFile's comment for the loop this prevents).
+  function handleTabOpened(rootId: number, relPath: string) {
+    openFile(rootId, relPath, false)
+  }
+
+  // tab-closed handler, mirroring handleTabOpened. Nothing to do if this
+  // client never had the tab open (e.g. it was only ever open in another
+  // browser) — the id lookup keeps that a no-op instead of pointless state
+  // churn.
+  function handleTabClosed(rootId: number, relPath: string) {
+    const tab = tabsRef.current.find((t) => t.rootId === rootId && t.relPath === relPath)
+    if (!tab) return
+    closeTab(tab.id, false)
+  }
+
+  // root-added handler (POST /api/roots on another client, or `mvs add-root`).
+  // Appends the root the event already carries rather than refetching
+  // GET /api/roots: the payload has everything FileTreePanel needs, and a
+  // refetch would be a second, racing source of truth for the same change.
+  // Guarded against duplicates so a replayed/echoed event can't list one root
+  // twice.
+  function handleRootAdded(rootId: number, name: string) {
+    setRoots((prev) => (prev.some((r) => r.id === rootId) ? prev : [...prev, { id: rootId, name }]))
+  }
+
   // Connects once to the daemon's /ws and stays connected for the app's
   // lifetime (see useFileWatcher.ts for the reconnect-on-disconnect
-  // behavior). file-added/file-removed both just need "the file tree might be
-  // stale" — refreshFileTree() is shared for both rather than distinguishing
-  // which file changed, per the brief's YAGNI note on partial tree updates.
-  useFileWatcher(handleFileChanged, refreshFileTree, refreshFileTree)
+  // behavior). One socket, one dispatch table: file events from the watcher,
+  // tab events from the open-tabs API, root events from POST /api/roots.
+  useFileWatcher({
+    onFileChanged: handleFileChanged,
+    onFileAdded: handleFileAdded,
+    onFileRemoved: handleFileRemoved,
+    onTabOpened: handleTabOpened,
+    onTabClosed: handleTabClosed,
+    onRootAdded: handleRootAdded,
+  })
 
   async function handleFileSearch(query: string, options: FilesSearchOptions) {
     const seq = ++fileSearchSeqRef.current
@@ -752,8 +875,11 @@ export function App() {
                   </button>
                   {/* .html tabs always render via HtmlView regardless of tab.mode (see
                       TabContent) — showing Edit/Split for them would be misleading UI
-                      since clicking either does nothing visible. */}
-                  {activeTab.encoding !== 'unknown' && !activeTab.relPath.endsWith('.html') && (
+                      since clicking either does nothing visible. A readOnly tab (its
+                      file was deleted on disk — see handleFileRemoved) is hidden the
+                      same way, for the same reason: TabContent forces view mode for it,
+                      so the toggles would do nothing. */}
+                  {activeTab.encoding !== 'unknown' && !activeTab.readOnly && !activeTab.relPath.endsWith('.html') && (
                     <>
                       <button
                         data-testid="mode-edit"

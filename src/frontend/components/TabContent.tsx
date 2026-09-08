@@ -103,10 +103,20 @@ export function TabContent({
   // isValidUtf8 check is a binary yes/no, not full charset detection (that
   // would need a charset-sniffing library — out of scope / YAGNI). The badge
   // is rendered above whichever view ends up below, regardless of file type.
+  //
+  // A tab whose file was deleted on disk (tab.readOnly — see App.tsx's
+  // file-removed handling) is the same "view only" situation with a different
+  // cause, so it reuses this one badge slot rather than adding a second
+  // notice. Encoding wins if somehow both apply: it's the reason that was
+  // already true when the file was last actually read.
   const encodingBadge =
     tab.encoding === 'unknown' ? (
       <div data-testid="encoding-badge">
         {t('tabContent.nonUtf8Encoding', 'Non-UTF-8 encoding — view only')}
+      </div>
+    ) : tab.readOnly ? (
+      <div data-testid="deleted-badge">
+        {t('tabContent.fileDeleted', 'This file no longer exists on disk — view only')}
       </div>
     ) : null
 
@@ -137,7 +147,7 @@ export function TabContent({
     )
   }
 
-  const effectiveMode = tab.encoding === 'unknown' ? 'view' : tab.mode
+  const effectiveMode = tab.encoding === 'unknown' || tab.readOnly ? 'view' : tab.mode
 
   // .mmd files render as a diagram in view mode by reusing the same
   // MermaidBlock component that already renders ```mermaid fenced code

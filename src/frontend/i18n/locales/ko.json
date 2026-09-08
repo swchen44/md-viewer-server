@@ -28,7 +28,8 @@
     "loading": "불러오는 중...",
     "loadError": "이 파일을 불러오지 못했습니다",
     "tooLarge": "파일이 너무 커서 표시하거나 편집할 수 없습니다",
-    "nonUtf8Encoding": "UTF-8이 아닌 인코딩입니다 — 보기 전용"
+    "nonUtf8Encoding": "UTF-8이 아닌 인코딩입니다 — 보기 전용",
+    "fileDeleted": "이 파일은 디스크에 더 이상 존재하지 않습니다 — 보기 전용"
   },
   "plantumlView": {
     "disabledHint": "이 다이어그램을 렌더링하려면 설정에서 \"다이어그램 소스를 PlantUML 서버로 전송\"을 활성화하고 서버를 지정하세요.",

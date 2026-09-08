@@ -7,58 +7,81 @@ import { getStoredToken } from '../auth.js'
 // complexity is YAGNI here (see task brief).
 const RECONNECT_DELAY_MS = 3000
 
-interface FileEvent {
+// Every event the daemon broadcasts carries a type and the root it concerns;
+// the payload beyond that differs per event (a path for the file/tab events,
+// a display name for root-added — see src/server/api/roots.js), so validation
+// is split into a shared base check plus a per-shape refinement below.
+interface BaseEvent {
   type: string
   rootId: number
+}
+
+interface PathEvent extends BaseEvent {
   relPath: string
 }
 
-function isFileEvent(value: unknown): value is FileEvent {
+interface RootAddedEvent extends BaseEvent {
+  name: string
+}
+
+function isBaseEvent(value: unknown): value is BaseEvent {
   return (
     typeof value === 'object' &&
     value !== null &&
-    typeof (value as FileEvent).type === 'string' &&
-    typeof (value as FileEvent).rootId === 'number' &&
-    typeof (value as FileEvent).relPath === 'string'
+    typeof (value as BaseEvent).type === 'string' &&
+    typeof (value as BaseEvent).rootId === 'number'
   )
+}
+
+function isPathEvent(value: BaseEvent): value is PathEvent {
+  return typeof (value as PathEvent).relPath === 'string'
+}
+
+function isRootAddedEvent(value: BaseEvent): value is RootAddedEvent {
+  return typeof (value as RootAddedEvent).name === 'string'
+}
+
+export interface FileWatcherHandlers {
+  onFileChanged?: (rootId: number, relPath: string) => void
+  onFileAdded?: (rootId: number, relPath: string) => void
+  onFileRemoved?: (rootId: number, relPath: string) => void
+  onTabOpened?: (rootId: number, relPath: string) => void
+  onTabClosed?: (rootId: number, relPath: string) => void
+  onRootAdded?: (rootId: number, name: string) => void
 }
 
 /**
  * Connects to the daemon's `/ws` WebSocket (see src/server/ws-server.js) and
- * dispatches the file events it broadcasts (see src/server/watcher.js:
- * `file-changed` / `file-added` / `file-removed`) to the matching callback.
+ * dispatches the events it broadcasts to the matching handler:
  *
- * This is the frontend's first WebSocket consumer and is meant to stay the
- * ONLY one — a later plan (remote tab control) extends the same connection
- * with more event types (tab-opened/closed/root-added, etc.) rather than
- * opening a second socket. The internal dispatch-by-`type` structure below is
- * what makes that extension straightforward: adding a new event type is just
- * another `case` and another callback parameter, no protocol/connection
- * changes needed.
+ * - `file-changed` / `file-added` / `file-removed` from the file watcher
+ *   (src/server/watcher.js)
+ * - `tab-opened` / `tab-closed` from the open-tabs REST API
+ *   (src/server/api/tabs.js), i.e. remote `mvs open` / `mvs close`
+ * - `root-added` from POST /api/roots (src/server/api/roots.js)
+ *
+ * This is the frontend's ONLY WebSocket consumer by design — new event types
+ * are added as another `case` and another handler here rather than by opening
+ * a second socket.
+ *
+ * Handlers are passed as one object rather than positionally: six callbacks
+ * that all share the shape `(number, string) => void` would otherwise be
+ * trivially swappable at the call site with nothing (not even TypeScript) to
+ * catch it — mixing up onTabOpened and onTabClosed is exactly the sort of bug
+ * that would only show up as tabs mysteriously closing on a second machine.
+ * Every handler is optional so a caller only wires the events it cares about.
  */
-export function useFileWatcher(
-  onFileChanged: (rootId: number, relPath: string) => void,
-  onFileAdded: (rootId: number, relPath: string) => void,
-  onFileRemoved: (rootId: number, relPath: string) => void
-): void {
+export function useFileWatcher(handlers: FileWatcherHandlers): void {
   // The connection effect below intentionally has an empty dependency array
-  // (connect once, reconnect only on real disconnects) — but the callbacks
-  // passed in by the caller can be a fresh closure every render (App.tsx
-  // redefines them on every render, same as its other handlers). Refs let the
-  // long-lived onmessage handler always call the LATEST callback without
-  // needing to tear down and reopen the socket whenever the caller re-renders.
-  const onFileChangedRef = useRef(onFileChanged)
-  const onFileAddedRef = useRef(onFileAdded)
-  const onFileRemovedRef = useRef(onFileRemoved)
+  // (connect once, reconnect only on real disconnects) — but the handlers
+  // object passed in by the caller is a fresh literal on every render (App.tsx
+  // builds it inline, same as its other handlers). A ref lets the long-lived
+  // onmessage handler always call the LATEST handlers without needing to tear
+  // down and reopen the socket whenever the caller re-renders.
+  const handlersRef = useRef(handlers)
   useEffect(() => {
-    onFileChangedRef.current = onFileChanged
-  }, [onFileChanged])
-  useEffect(() => {
-    onFileAddedRef.current = onFileAdded
-  }, [onFileAdded])
-  useEffect(() => {
-    onFileRemovedRef.current = onFileRemoved
-  }, [onFileRemoved])
+    handlersRef.current = handlers
+  })
 
   useEffect(() => {
     let cancelled = false
@@ -81,16 +104,26 @@ export function useFileWatcher(
           // Malformed payload — nothing sane to dispatch, ignore it.
           return
         }
-        if (!isFileEvent(data)) return
+        if (!isBaseEvent(data)) return
+        const h = handlersRef.current
         switch (data.type) {
           case 'file-changed':
-            onFileChangedRef.current(data.rootId, data.relPath)
+            if (isPathEvent(data)) h.onFileChanged?.(data.rootId, data.relPath)
             break
           case 'file-added':
-            onFileAddedRef.current(data.rootId, data.relPath)
+            if (isPathEvent(data)) h.onFileAdded?.(data.rootId, data.relPath)
             break
           case 'file-removed':
-            onFileRemovedRef.current(data.rootId, data.relPath)
+            if (isPathEvent(data)) h.onFileRemoved?.(data.rootId, data.relPath)
+            break
+          case 'tab-opened':
+            if (isPathEvent(data)) h.onTabOpened?.(data.rootId, data.relPath)
+            break
+          case 'tab-closed':
+            if (isPathEvent(data)) h.onTabClosed?.(data.rootId, data.relPath)
+            break
+          case 'root-added':
+            if (isRootAddedEvent(data)) h.onRootAdded?.(data.rootId, data.name)
             break
           default:
             // Unknown/future event type (e.g. 'watch-error') — ignore for now.

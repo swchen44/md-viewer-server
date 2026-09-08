@@ -33,34 +33,84 @@ describe('useFileWatcher', () => {
   })
 
   it('connects to /ws with the stored token', () => {
-    renderHook(() => useFileWatcher(() => {}, () => {}, () => {}))
+    renderHook(() => useFileWatcher({}))
     expect(MockWebSocket.instances[0].url).toContain('token=tok')
   })
 
   it('dispatches a file-changed event to onFileChanged', () => {
     const onFileChanged = vi.fn()
-    renderHook(() => useFileWatcher(onFileChanged, () => {}, () => {}))
+    renderHook(() => useFileWatcher({ onFileChanged }))
     MockWebSocket.instances[0].emit({ type: 'file-changed', rootId: 0, relPath: 'a.md' })
     expect(onFileChanged).toHaveBeenCalledWith(0, 'a.md')
   })
 
   it('dispatches a file-added event to onFileAdded', () => {
     const onFileAdded = vi.fn()
-    renderHook(() => useFileWatcher(() => {}, onFileAdded, () => {}))
+    renderHook(() => useFileWatcher({ onFileAdded }))
     MockWebSocket.instances[0].emit({ type: 'file-added', rootId: 1, relPath: 'new.md' })
     expect(onFileAdded).toHaveBeenCalledWith(1, 'new.md')
   })
 
   it('dispatches a file-removed event to onFileRemoved', () => {
     const onFileRemoved = vi.fn()
-    renderHook(() => useFileWatcher(() => {}, () => {}, onFileRemoved))
+    renderHook(() => useFileWatcher({ onFileRemoved }))
     MockWebSocket.instances[0].emit({ type: 'file-removed', rootId: 2, relPath: 'gone.md' })
     expect(onFileRemoved).toHaveBeenCalledWith(2, 'gone.md')
   })
 
+  it('dispatches a tab-opened event to onTabOpened', () => {
+    const onTabOpened = vi.fn()
+    renderHook(() => useFileWatcher({ onTabOpened }))
+    MockWebSocket.instances[0].emit({ type: 'tab-opened', rootId: 0, relPath: 'remote.md' })
+    expect(onTabOpened).toHaveBeenCalledWith(0, 'remote.md')
+  })
+
+  it('dispatches a tab-closed event to onTabClosed', () => {
+    const onTabClosed = vi.fn()
+    renderHook(() => useFileWatcher({ onTabClosed }))
+    MockWebSocket.instances[0].emit({ type: 'tab-closed', rootId: 1, relPath: 'remote.md' })
+    expect(onTabClosed).toHaveBeenCalledWith(1, 'remote.md')
+  })
+
+  // root-added is the first broadcast event whose payload carries `name`
+  // instead of `relPath` (see src/server/api/roots.js), so it exercises the
+  // widened payload validation, not just another dispatch case.
+  it('dispatches a root-added event to onRootAdded', () => {
+    const onRootAdded = vi.fn()
+    renderHook(() => useFileWatcher({ onRootAdded }))
+    MockWebSocket.instances[0].emit({ type: 'root-added', rootId: 3, name: 'docs' })
+    expect(onRootAdded).toHaveBeenCalledWith(3, 'docs')
+  })
+
+  it('ignores a root-added event with no name, and a tab-opened event with no relPath', () => {
+    const onRootAdded = vi.fn()
+    const onTabOpened = vi.fn()
+    renderHook(() => useFileWatcher({ onRootAdded, onTabOpened }))
+    MockWebSocket.instances[0].emit({ type: 'root-added', rootId: 3 })
+    MockWebSocket.instances[0].emit({ type: 'tab-opened', rootId: 3 })
+    expect(onRootAdded).not.toHaveBeenCalled()
+    expect(onTabOpened).not.toHaveBeenCalled()
+  })
+
+  // The handlers object is a fresh literal on every render (App.tsx rebuilds
+  // it inline), but the socket is opened once — a re-render must not leave the
+  // long-lived onmessage handler calling the FIRST render's stale callbacks.
+  it('dispatches to the latest handlers after a re-render, without reconnecting', () => {
+    const first = vi.fn()
+    const second = vi.fn()
+    let handler = first
+    const { rerender } = renderHook(() => useFileWatcher({ onTabOpened: (r, p) => handler(r, p) }))
+    handler = second
+    rerender()
+    MockWebSocket.instances[0].emit({ type: 'tab-opened', rootId: 0, relPath: 'a.md' })
+    expect(first).not.toHaveBeenCalled()
+    expect(second).toHaveBeenCalledWith(0, 'a.md')
+    expect(MockWebSocket.instances).toHaveLength(1)
+  })
+
   it('reconnects with a fixed delay after the socket closes', () => {
     vi.useFakeTimers()
-    renderHook(() => useFileWatcher(() => {}, () => {}, () => {}))
+    renderHook(() => useFileWatcher({}))
     expect(MockWebSocket.instances).toHaveLength(1)
 
     MockWebSocket.instances[0].onclose?.()
@@ -73,7 +123,7 @@ describe('useFileWatcher', () => {
 
   it('closes the socket and does not reconnect after unmount', () => {
     vi.useFakeTimers()
-    const { unmount } = renderHook(() => useFileWatcher(() => {}, () => {}, () => {}))
+    const { unmount } = renderHook(() => useFileWatcher({}))
     const socket = MockWebSocket.instances[0]
     unmount()
     expect(socket.closed).toBe(true)

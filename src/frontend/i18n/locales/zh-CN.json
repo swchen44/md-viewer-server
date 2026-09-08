@@ -28,7 +28,8 @@
     "loading": "载入中...",
     "loadError": "此文件载入失败",
     "tooLarge": "文件过大，不提供完整渲染",
-    "nonUtf8Encoding": "非 UTF-8 编码，仅供查看"
+    "nonUtf8Encoding": "非 UTF-8 编码，仅供查看",
+    "fileDeleted": "此文件已不存在于磁盘上，仅供查看"
   },
   "plantumlView": {
     "disabledHint": "请至设置中开启“将图表源码发送到 PlantUML 服务器”并指定服务器，才能渲染此图表。",

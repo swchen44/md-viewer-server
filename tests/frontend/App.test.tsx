@@ -1182,3 +1182,238 @@ describe('App main content, save, draft, and conflict wiring', () => {
     await waitFor(() => expect(screen.getByTitle('html-preview').getAttribute('sandbox')).toContain('allow-scripts'))
   })
 })
+
+// Captures the WebSocket the app opens (see useFileWatcher) so a test can push
+// daemon broadcasts into a live <App />. tests/frontend/setup.ts installs an
+// inert no-op WebSocket by default; this replaces it for the tests below and
+// `vi.unstubAllGlobals()` in their afterEach restores the default.
+class MockWebSocket {
+  static instances: MockWebSocket[] = []
+  onmessage: ((event: { data: string }) => void) | null = null
+  onopen: (() => void) | null = null
+  onclose: (() => void) | null = null
+  onerror: (() => void) | null = null
+  constructor(public url: string) {
+    MockWebSocket.instances.push(this)
+  }
+  close() {}
+  send() {}
+  emit(data: unknown) {
+    this.onmessage?.({ data: JSON.stringify(data) })
+  }
+}
+
+// Pushes a daemon broadcast through the app's live WebSocket. Wrapped in act()
+// because every handler it reaches updates App state.
+function emitWsEvent(data: unknown) {
+  act(() => {
+    MockWebSocket.instances[0].emit(data)
+  })
+}
+
+function tabsApiCalls(fetchMock: ReturnType<typeof vi.fn>, method: string) {
+  return fetchMock.mock.calls.filter(
+    ([url, init]) => String(url).includes('/api/tabs') && (init as RequestInit | undefined)?.method === method
+  )
+}
+
+describe('App remote tab sync', () => {
+  beforeEach(() => {
+    MockWebSocket.instances = []
+    vi.stubGlobal('WebSocket', MockWebSocket)
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  function stubTwoFileProject() {
+    return stubRoutedFetch([
+      { match: '/api/roots', response: [{ id: 0, name: 'proj' }] },
+      {
+        match: '/api/files',
+        response: {
+          files: [
+            { relPath: 'a.md', size: 5, mtimeMs: 1 },
+            { relPath: 'b.md', size: 5, mtimeMs: 1 },
+          ],
+        },
+      },
+      { match: '/api/file?', response: { content: '# Hi', mtimeMs: 1, encoding: 'utf-8' } },
+    ])
+  }
+
+  it('opening a file locally fire-and-forget POSTs it to /api/tabs', async () => {
+    const fetchMock = stubTwoFileProject()
+    render(<App />)
+    await waitFor(() => screen.getByText('a.md'))
+
+    fireEvent.click(screen.getByText('a.md'))
+
+    await waitFor(() => expect(tabsApiCalls(fetchMock, 'POST')).toHaveLength(1))
+    const [, init] = tabsApiCalls(fetchMock, 'POST')[0]
+    expect(JSON.parse(String((init as RequestInit).body))).toEqual({ root: 0, path: 'a.md' })
+  })
+
+  it('closing a tab locally fire-and-forget DELETEs it from /api/tabs', async () => {
+    const fetchMock = stubTwoFileProject()
+    render(<App />)
+    await waitFor(() => screen.getByText('a.md'))
+    fireEvent.click(screen.getByText('a.md'))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'close a.md' })).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: 'close a.md' }))
+
+    await waitFor(() => expect(tabsApiCalls(fetchMock, 'DELETE')).toHaveLength(1))
+    const [, init] = tabsApiCalls(fetchMock, 'DELETE')[0]
+    expect(JSON.parse(String((init as RequestInit).body))).toEqual({ root: 0, path: 'a.md' })
+  })
+
+  it('a failing POST /api/tabs still opens the tab locally and shows no error', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+        if (String(url).includes('/api/tabs')) return Promise.reject(new Error('daemon gone'))
+        if (String(url).includes('/api/roots')) return Promise.resolve(jsonResponse([{ id: 0, name: 'proj' }]))
+        if (String(url).includes('/api/files'))
+          return Promise.resolve(jsonResponse({ files: [{ relPath: 'a.md', size: 5, mtimeMs: 1 }] }))
+        if (String(url).includes('/api/file?'))
+          return Promise.resolve(jsonResponse({ content: '# Hi', mtimeMs: 1, encoding: 'utf-8' }))
+        void init
+        return Promise.resolve(jsonResponse({}))
+      })
+    )
+    render(<App />)
+    await waitFor(() => screen.getByText('a.md'))
+
+    fireEvent.click(screen.getByText('a.md'))
+
+    // The tab opens regardless — remote sync is best-effort visibility for the
+    // CLI, never a gate on the local UI — and nothing is surfaced to the user.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'close a.md' })).toBeInTheDocument())
+    expect(screen.queryByTestId('save-error')).not.toBeInTheDocument()
+  })
+
+  it('a remote tab-opened event opens the tab locally', async () => {
+    stubTwoFileProject()
+    render(<App />)
+    await waitFor(() => screen.getByText('a.md'))
+
+    emitWsEvent({ type: 'tab-opened', rootId: 0, relPath: 'b.md' })
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'close b.md' })).toBeInTheDocument())
+  })
+
+  it('a remote tab-opened event does NOT POST back to /api/tabs (no broadcast echo loop)', async () => {
+    const fetchMock = stubTwoFileProject()
+    render(<App />)
+    await waitFor(() => screen.getByText('a.md'))
+
+    emitWsEvent({ type: 'tab-opened', rootId: 0, relPath: 'b.md' })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'close b.md' })).toBeInTheDocument())
+
+    // The whole point: the tab opened purely from the broadcast, and issuing a
+    // POST here would make the daemon re-broadcast tab-opened to every client
+    // (this one included) forever.
+    expect(tabsApiCalls(fetchMock, 'POST')).toHaveLength(0)
+  })
+
+  it('the daemon echoing back a locally-opened tab does not produce a second POST', async () => {
+    const fetchMock = stubTwoFileProject()
+    render(<App />)
+    await waitFor(() => screen.getByText('a.md'))
+
+    fireEvent.click(screen.getByText('a.md'))
+    await waitFor(() => expect(tabsApiCalls(fetchMock, 'POST')).toHaveLength(1))
+
+    // POST /api/tabs makes the daemon broadcast tab-opened to ALL clients,
+    // including the one that just opened it — this is that echo arriving back.
+    emitWsEvent({ type: 'tab-opened', rootId: 0, relPath: 'a.md' })
+
+    expect(tabsApiCalls(fetchMock, 'POST')).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: 'close a.md' })).toHaveLength(1)
+  })
+
+  it('a remote tab-closed event closes the tab locally without DELETEing it again', async () => {
+    const fetchMock = stubTwoFileProject()
+    render(<App />)
+    await waitFor(() => screen.getByText('a.md'))
+    fireEvent.click(screen.getByText('a.md'))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'close a.md' })).toBeInTheDocument())
+
+    emitWsEvent({ type: 'tab-closed', rootId: 0, relPath: 'a.md' })
+
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'close a.md' })).not.toBeInTheDocument())
+    expect(tabsApiCalls(fetchMock, 'DELETE')).toHaveLength(0)
+  })
+
+  it('a root-added event appends the new root without refetching GET /api/roots', async () => {
+    const fetchMock = stubTwoFileProject()
+    render(<App />)
+    await waitFor(() => screen.getByText('a.md'))
+    const rootsCallsBefore = fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/roots')).length
+
+    emitWsEvent({ type: 'root-added', rootId: 1, name: 'docs' })
+
+    // FileTreePanel only labels roots once there's more than one, so the new
+    // name appearing is proof it reached `roots` state.
+    await waitFor(() => expect(screen.getByText('docs')).toBeInTheDocument())
+    expect(screen.getByText('proj')).toBeInTheDocument()
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/roots'))).toHaveLength(rootsCallsBefore)
+  })
+})
+
+describe('App file-removed read-only wiring', () => {
+  beforeEach(() => {
+    MockWebSocket.instances = []
+    vi.stubGlobal('WebSocket', MockWebSocket)
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  async function openSingleFileTab() {
+    const fetchMock = stubRoutedFetch([
+      { match: '/api/roots', response: [{ id: 0, name: 'proj' }] },
+      { match: '/api/files', response: { files: [{ relPath: 'a.md', size: 5, mtimeMs: 1 }] } },
+      { match: '/api/file?', response: { content: '# Hi', mtimeMs: 1, encoding: 'utf-8' } },
+    ])
+    render(<App />)
+    await waitFor(() => screen.getByText('a.md'))
+    fireEvent.click(screen.getByText('a.md'))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Hi' })).toBeInTheDocument())
+    return fetchMock
+  }
+
+  it('marks an open tab read-only when its file is deleted externally', async () => {
+    await openSingleFileTab()
+    expect(screen.getByTestId('mode-edit')).toBeInTheDocument()
+
+    emitWsEvent({ type: 'file-removed', rootId: 0, relPath: 'a.md' })
+
+    // Same "view only" mechanism the non-UTF-8/.html tabs already use: the
+    // Edit/Split toggles disappear entirely rather than being left clickable.
+    await waitFor(() => expect(screen.queryByTestId('mode-edit')).not.toBeInTheDocument())
+    expect(screen.queryByTestId('mode-split')).not.toBeInTheDocument()
+    expect(screen.getByTestId('deleted-badge')).toBeInTheDocument()
+    // The tab itself stays open with its content — a deleted file must not
+    // silently take the user's last look at it away.
+    expect(screen.getByRole('button', { name: 'close a.md' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Hi' })).toBeInTheDocument()
+  })
+
+  it('does not mark other open tabs read-only when an unrelated file is deleted', async () => {
+    await openSingleFileTab()
+
+    emitWsEvent({ type: 'file-removed', rootId: 0, relPath: 'somewhere/else.md' })
+
+    expect(screen.getByTestId('mode-edit')).toBeInTheDocument()
+    expect(screen.queryByTestId('deleted-badge')).not.toBeInTheDocument()
+  })
+
+  it('lifts the read-only mark when the file reappears (atomic rewrite = remove + add)', async () => {
+    await openSingleFileTab()
+    emitWsEvent({ type: 'file-removed', rootId: 0, relPath: 'a.md' })
+    await waitFor(() => expect(screen.queryByTestId('mode-edit')).not.toBeInTheDocument())
+
+    emitWsEvent({ type: 'file-added', rootId: 0, relPath: 'a.md' })
+
+    await waitFor(() => expect(screen.getByTestId('mode-edit')).toBeInTheDocument())
+    expect(screen.queryByTestId('deleted-badge')).not.toBeInTheDocument()
+  })
+})
