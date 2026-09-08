@@ -57,3 +57,19 @@ ps aux | grep -i vitest | grep -v grep | awk '{print $2}' | xargs -r kill -9
 ```
 
 This is safe: they're ephemeral test-runner workers with no unsaved state, not anything from the user's own work.
+
+## Watch for orphaned real daemon processes from manual testing
+
+Beyond vitest workers, implementers/reviewers sometimes start a real daemon (`node bin/cli.js start ...` or `npm run build && node bin/cli.js start`) to manually verify a feature end-to-end, then call `stop` and assume it's gone. `stop`'s "Stopped (via api)"/`status`'s "not running" only check whether the port accepts new connections — they do not confirm the underlying OS process actually exited (see the shutdown-hang bug fixed in commit `8beab02`, and a real recurrence found afterward that turned out to be an unrelated leftover from an earlier manual test, not a regression of that fix). Periodically check for this too:
+
+```bash
+ps aux | grep -i "server/entry.js" | grep -v grep
+```
+
+Cross-reference with `~/.local/state/md-viewer-server/server.log` — a real daemon logs `server listening`/`shutting down`/`server closed` with its own pid; a process with no matching log entries, or one whose logged pid doesn't match a still-alive `ps` entry, is an orphan safe to kill:
+
+```bash
+ps aux | grep -i "server/entry.js" | grep -v grep | awk '{print $2}' | xargs -r kill -9
+```
+
+Also remove any leftover test config it left behind so it doesn't leak into the next test: `rm -rf ~/.config/md-viewer-server` (only when you're sure no daemon you care about is using it — this is the daemon's one shared default config location).
