@@ -235,6 +235,57 @@ describe('CLI lifecycle: start -> status -> stop', () => {
     })
     expect((await getRes.json()).plantumlServerUrl).toBe('http://plantuml.internal:8080')
   })
+
+  it('open <path> resolves the path to the configured root and opens the tab via POST /api/tabs', async () => {
+    const { stdout: startOut } = await execFileAsync(
+      process.execPath,
+      [CLI_PATH, 'start', '--root', testRoot, '--port', String(TEST_PORT)],
+      { env }
+    )
+    const token = extractToken(startOut)
+    const filePath = path.join(testRoot, 'notes.md')
+    fs.writeFileSync(filePath, '# hi')
+
+    const { stdout: openOut } = await execFileAsync(process.execPath, [CLI_PATH, 'open', filePath], {
+      env,
+    })
+    expect(openOut).toContain('Opened (root 0): notes.md')
+
+    const tabsRes = await fetch(`http://127.0.0.1:${TEST_PORT}/api/tabs`, {
+      headers: { 'X-Auth-Token': token },
+    })
+    expect(await tabsRes.json()).toEqual([{ rootId: 0, relPath: 'notes.md' }])
+  })
+
+  // The one behavior specifically worth locking down at the CLI level too:
+  // `open` on a path outside every configured root must fail cleanly and
+  // must NEVER silently call POST /api/roots to expand access on its own.
+  it('open <path outside every root> fails with path-outside-roots and does not add a root', async () => {
+    await execFileAsync(
+      process.execPath,
+      [CLI_PATH, 'start', '--root', testRoot, '--port', String(TEST_PORT)],
+      { env }
+    )
+
+    const outsidePath = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-outside-'))
+    try {
+      const failure = await execFileAsync(
+        process.execPath,
+        [CLI_PATH, 'open', path.join(outsidePath, 'file.md')],
+        { env }
+      ).catch((err) => err)
+
+      expect(failure.code).toBe(1)
+      expect(failure.stderr).toContain('Path is not under any configured root.')
+      expect(failure.stderr).toContain('md-viewer-server add-root <folder>')
+
+      const configPath = path.join(configHome, 'md-viewer-server', 'config.json')
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+      expect(config.roots).toEqual([testRoot])
+    } finally {
+      fs.rmSync(outsidePath, { recursive: true, force: true })
+    }
+  })
 })
 
 function extractToken(cliOutput) {

@@ -4,6 +4,7 @@ import { runStart } from '../src/server/commands/start.js'
 import { runStatus } from '../src/server/commands/status.js'
 import { runStop } from '../src/server/commands/stop.js'
 import { runAddRoot } from '../src/server/commands/add-root.js'
+import { runOpenFile } from '../src/server/commands/open-file.js'
 import { startWithRotatedToken } from '../src/server/commands/rotate-restart.js'
 import { runDoctor } from '../src/server/doctor.js'
 import { getConfigDir, getStateDir } from '../src/server/xdg-paths.js'
@@ -84,6 +85,29 @@ function printAddRootResult(result) {
   }
 }
 
+function printOpenResult(result) {
+  if (result.outcome === 'not-configured') {
+    console.log('Not configured yet. Run `md-viewer-server start --root <path>` first.')
+    process.exitCode = 1
+  } else if (result.outcome === 'not-running') {
+    console.error('Server is not running. Run `md-viewer-server start` first.')
+    process.exitCode = 1
+  } else if (result.outcome === 'path-outside-roots') {
+    // Intentionally does NOT auto-add the root — see open-file.js's
+    // runOpenFile() doc comment. The user/agent must run `add-root`
+    // themselves before retrying `open`.
+    console.error(
+      'Path is not under any configured root. Run `md-viewer-server add-root <folder>` first, then retry `open`.'
+    )
+    process.exitCode = 1
+  } else if (result.outcome === 'opened') {
+    console.log(`Opened (root ${result.rootId}): ${result.relPath}`)
+  } else {
+    console.error(`Failed to open (status ${result.status}).`)
+    process.exitCode = 1
+  }
+}
+
 async function main() {
   const {
     command,
@@ -143,6 +167,14 @@ async function main() {
       return
     }
     printAddRootResult(await runAddRoot(rootPath))
+  } else if (command === 'open') {
+    const targetPath = positionals[0]
+    if (!targetPath) {
+      console.error('Usage: md-viewer-server open <path>')
+      process.exitCode = 1
+      return
+    }
+    printOpenResult(await runOpenFile(targetPath, { cwd: process.cwd() }))
   } else if (command === 'doctor') {
     const configDir = getConfigDir()
     const stateDir = getStateDir()
@@ -160,7 +192,7 @@ async function main() {
     if (results.some((r) => r.status === 'fail')) process.exitCode = 1
   } else {
     console.error(
-      `Unknown command: ${command}\nUsage: md-viewer-server <start|stop|status|add-root|doctor> [options]`
+      `Unknown command: ${command}\nUsage: md-viewer-server <start|stop|status|add-root|open|doctor> [options]`
     )
     process.exitCode = 1
   }
