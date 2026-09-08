@@ -1007,6 +1007,157 @@ describe('App main content, save, draft, and conflict wiring', () => {
     expect(screen.queryByTestId('mode-split')).not.toBeInTheDocument()
   })
 
+  // Gap 1 (Task 6): HtmlView always renders regardless of tab.mode, so
+  // showing Edit/Split buttons for a .html tab is misleading — clicking them
+  // does nothing visible. Only the View button (which IS the only real mode)
+  // should show.
+  it('hides the edit/split mode buttons for a .html file', async () => {
+    stubRoutedFetch([
+      { match: '/api/roots', response: [{ id: 0, name: 'proj' }] },
+      { match: '/api/files', response: { files: [{ relPath: 'a.html', size: 5, mtimeMs: 1 }] } },
+      { match: '/api/file?', response: { content: '<p>hi</p>', mtimeMs: 1, encoding: 'utf-8' } },
+    ])
+    render(<App />)
+    await waitFor(() => screen.getByText('a.html'))
+    fireEvent.click(screen.getByText('a.html'))
+    await waitFor(() => expect(screen.getByTestId('mode-view')).toBeInTheDocument())
+    expect(screen.queryByTestId('mode-edit')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('mode-split')).not.toBeInTheDocument()
+  })
+
+  // Gap 2 (Task 6): Tab.encoding defaults to 'utf-8' until GET /api/file
+  // actually resolves, so before that response arrives the Edit/Split
+  // buttons look clickable even though tab.content is still null. Clicking
+  // them wouldn't corrupt anything (TabContent still shows "Loading..."
+  // regardless of tab.mode), but it's misleading UI — the button would show
+  // "selected" while the screen stays on the loading placeholder.
+  it('disables the edit/split mode buttons while the tab content has not loaded yet', async () => {
+    let resolveFile: (res: Response) => void
+    const filePromise = new Promise<Response>((resolve) => {
+      resolveFile = resolve
+    })
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/roots')) return Promise.resolve(jsonResponse([{ id: 0, name: 'proj' }]))
+      if (url.includes('/api/files'))
+        return Promise.resolve(jsonResponse({ files: [{ relPath: 'a.md', size: 5, mtimeMs: 1 }] }))
+      if (url.includes('/api/file?')) return filePromise
+      return Promise.resolve(jsonResponse({}))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+    await waitFor(() => screen.getByText('a.md'))
+    fireEvent.click(screen.getByText('a.md'))
+
+    await waitFor(() => expect(screen.getByTestId('mode-edit')).toBeInTheDocument())
+    expect(screen.getByTestId('mode-edit')).toBeDisabled()
+    expect(screen.getByTestId('mode-split')).toBeDisabled()
+
+    await act(async () => {
+      resolveFile!(jsonResponse({ content: '# Hi', mtimeMs: 1, encoding: 'utf-8' }))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    expect(screen.getByTestId('mode-edit')).not.toBeDisabled()
+    expect(screen.getByTestId('mode-split')).not.toBeDisabled()
+  })
+
+  // Gap 3 (Task 6): previously Ctrl+S/Cmd+S was only intercepted by
+  // MarkdownEditor's own <textarea> keydown listener — pressing it while
+  // focus was anywhere else in the content area (View mode has no textarea
+  // at all; Split's preview pane is a separate element) fell through to the
+  // browser's native "Save Page" dialog instead of saving. A window-level
+  // listener must catch it regardless of focus location.
+  describe('Ctrl+S works regardless of focus location', () => {
+    it('saves via Ctrl+S while in View mode (no textarea focused, or nothing focused)', async () => {
+      const fetchMock = vi.fn().mockImplementation((url: string, options?: RequestInit) => {
+        if (url.includes('/api/roots')) return Promise.resolve(jsonResponse([{ id: 0, name: 'proj' }]))
+        if (url.includes('/api/files'))
+          return Promise.resolve(jsonResponse({ files: [{ relPath: 'a.md', size: 5, mtimeMs: 1 }] }))
+        if (options?.method === 'PUT') return Promise.resolve(jsonResponse({ mtimeMs: 42 }))
+        if (url.includes('/api/file?'))
+          return Promise.resolve(jsonResponse({ content: '# Hi', mtimeMs: 1, encoding: 'utf-8' }))
+        return Promise.resolve(jsonResponse({}))
+      })
+      vi.stubGlobal('fetch', fetchMock)
+
+      render(<App />)
+      await waitFor(() => screen.getByText('a.md'))
+      fireEvent.click(screen.getByText('a.md'))
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Hi' })).toBeInTheDocument())
+
+      // Still in View mode — no textarea exists to hold focus, so any
+      // Ctrl+S handling can only come from a listener that doesn't depend on
+      // a specific element being focused.
+      expect(document.querySelector('textarea')).not.toBeInTheDocument()
+
+      fireEvent.keyDown(window, { key: 's', ctrlKey: true })
+
+      await waitFor(() =>
+        expect(fetchMock.mock.calls.some(([, opts]) => (opts as RequestInit | undefined)?.method === 'PUT')).toBe(
+          true
+        )
+      )
+    })
+
+    it('saves via Ctrl+S while focus is in Split mode\'s preview pane, not the editor textarea', async () => {
+      const fetchMock = vi.fn().mockImplementation((url: string, options?: RequestInit) => {
+        if (url.includes('/api/roots')) return Promise.resolve(jsonResponse([{ id: 0, name: 'proj' }]))
+        if (url.includes('/api/files'))
+          return Promise.resolve(jsonResponse({ files: [{ relPath: 'a.md', size: 5, mtimeMs: 1 }] }))
+        if (options?.method === 'PUT') return Promise.resolve(jsonResponse({ mtimeMs: 42 }))
+        if (url.includes('/api/file?'))
+          return Promise.resolve(jsonResponse({ content: '# Hi', mtimeMs: 1, encoding: 'utf-8' }))
+        return Promise.resolve(jsonResponse({}))
+      })
+      vi.stubGlobal('fetch', fetchMock)
+
+      render(<App />)
+      await waitFor(() => screen.getByText('a.md'))
+      fireEvent.click(screen.getByText('a.md'))
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Hi' })).toBeInTheDocument())
+      fireEvent.click(screen.getByTestId('mode-split'))
+      await findEditorTextarea()
+
+      const preview = screen.getByRole('heading', { name: 'Hi' })
+      fireEvent.keyDown(preview, { key: 's', ctrlKey: true })
+
+      await waitFor(() =>
+        expect(fetchMock.mock.calls.some(([, opts]) => (opts as RequestInit | undefined)?.method === 'PUT')).toBe(
+          true
+        )
+      )
+    })
+
+    it('does not double-save when Ctrl+S is pressed inside the editor textarea (defaultPrevented short-circuits the window-level listener)', async () => {
+      const fetchMock = vi.fn().mockImplementation((url: string, options?: RequestInit) => {
+        if (url.includes('/api/roots')) return Promise.resolve(jsonResponse([{ id: 0, name: 'proj' }]))
+        if (url.includes('/api/files'))
+          return Promise.resolve(jsonResponse({ files: [{ relPath: 'a.md', size: 5, mtimeMs: 1 }] }))
+        if (options?.method === 'PUT') return Promise.resolve(jsonResponse({ mtimeMs: 42 }))
+        if (url.includes('/api/file?'))
+          return Promise.resolve(jsonResponse({ content: '# Hi', mtimeMs: 1, encoding: 'utf-8' }))
+        return Promise.resolve(jsonResponse({}))
+      })
+      vi.stubGlobal('fetch', fetchMock)
+
+      render(<App />)
+      await waitFor(() => screen.getByText('a.md'))
+      fireEvent.click(screen.getByText('a.md'))
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Hi' })).toBeInTheDocument())
+      fireEvent.click(screen.getByTestId('mode-edit'))
+      const textarea = await findEditorTextarea()
+
+      fireEvent.keyDown(textarea, { key: 's', ctrlKey: true })
+
+      await waitFor(() =>
+        expect(fetchMock.mock.calls.filter(([, opts]) => (opts as RequestInit | undefined)?.method === 'PUT')).toHaveLength(
+          1
+        )
+      )
+    })
+  })
+
   it('passes settings.effective.allowHtmlScripts through to TabContent for an open .html tab', async () => {
     stubRoutedFetch([
       {

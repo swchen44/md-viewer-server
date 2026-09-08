@@ -670,6 +670,30 @@ export function App() {
     window.print()
   }
 
+  // Ctrl+S/Cmd+S must work no matter where focus currently is inside the
+  // content area, not just inside MarkdownEditor's own <textarea> — that
+  // element's own keydown listener only covers Edit/Split's editor pane, so
+  // View mode (no textarea at all) and Split's preview pane previously fell
+  // through to the browser's native "Save Page" dialog. A window-level
+  // listener catches every focus location, including no focus at all.
+  //
+  // `e.defaultPrevented` is how this avoids double-saving when the keydown
+  // actually originated inside MarkdownEditor's textarea: that component's
+  // own handler runs first (it's an ancestor-bound React onKeyDown, which
+  // fires before this native listener sees the bubbled event) and calls
+  // preventDefault() itself — seeing that here means the save already
+  // happened, so this listener does nothing further.
+  useEffect(() => {
+    function handleGlobalKeyDown(e: KeyboardEvent) {
+      const isSaveShortcut = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's'
+      if (!isSaveShortcut || e.defaultPrevented) return
+      e.preventDefault()
+      if (activeTab) handleSave(activeTab.id)
+    }
+    window.addEventListener('keydown', handleGlobalKeyDown)
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
+  })
+
   return (
     <div data-testid="app-shell" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <style data-testid="custom-css-style">{effectiveCustomCss}</style>
@@ -726,11 +750,19 @@ export function App() {
                   >
                     {t('modeToggle.view', 'View')}
                   </button>
-                  {activeTab.encoding !== 'unknown' && (
+                  {/* .html tabs always render via HtmlView regardless of tab.mode (see
+                      TabContent) — showing Edit/Split for them would be misleading UI
+                      since clicking either does nothing visible. */}
+                  {activeTab.encoding !== 'unknown' && !activeTab.relPath.endsWith('.html') && (
                     <>
                       <button
                         data-testid="mode-edit"
                         aria-pressed={activeTab.mode === 'edit'}
+                        // tab.encoding defaults to 'utf-8' until GET /api/file actually
+                        // resolves, so before tab.content loads this button would
+                        // otherwise look clickable/selectable even though the screen is
+                        // still stuck on TabContent's "Loading..." placeholder.
+                        disabled={activeTab.content === null}
                         onClick={() => handleModeChange(activeTab.id, 'edit')}
                       >
                         {t('modeToggle.edit', 'Edit')}
@@ -738,6 +770,7 @@ export function App() {
                       <button
                         data-testid="mode-split"
                         aria-pressed={activeTab.mode === 'split'}
+                        disabled={activeTab.content === null}
                         onClick={() => handleModeChange(activeTab.id, 'split')}
                       >
                         {t('modeToggle.split', 'Split')}
