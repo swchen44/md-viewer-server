@@ -12,6 +12,8 @@ import { createSearchRouter } from './api/search.js'
 import { createSettingsRouter } from './api/settings.js'
 import { createPlantUmlRouter } from './api/plantuml.js'
 import { createVersionCheckRouter } from './api/version-check.js'
+import { createTabsRouter } from './api/tabs.js'
+import { createOpenTabsRegistry } from './open-tabs.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -38,9 +40,19 @@ export function createApp({
   roots = [],
   extensions = [],
   configDir,
+  // Defaults to a no-op stand-in so tests/callers that don't exercise
+  // tab-broadcasting routes (most existing api-*.test.js files) don't need
+  // to know about it. entry.js passes the real one — see its daemonControl
+  // comment for why routers always call daemonControl.broadcast(...) rather
+  // than a wsServer reference directly.
+  daemonControl = { broadcast: () => {}, addRootWatch: () => {} },
 }) {
   const app = express()
   app.use(express.json({ limit: '10mb' }))
+
+  // In-memory "currently open tabs" state, shared by every request this app
+  // instance serves. Not persisted — see src/server/open-tabs.js.
+  const openTabsRegistry = createOpenTabsRegistry()
 
   app.get('/api/health', (req, res) => {
     res.json({
@@ -62,6 +74,7 @@ export function createApp({
   app.use('/api', authMiddleware, createSettingsRouter(configDir))
   app.use('/api', authMiddleware, createPlantUmlRouter(configDir))
   app.use('/api', authMiddleware, createVersionCheckRouter(configDir, packageVersion))
+  app.use('/api', authMiddleware, createTabsRouter(roots, openTabsRegistry, daemonControl))
 
   app.post('/api/shutdown', (req, res) => {
     const token = req.header('X-Auth-Token')
