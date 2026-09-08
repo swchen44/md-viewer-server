@@ -1,10 +1,12 @@
 #!/usr/bin/env node
+import path from 'node:path'
 import { parseArgs, resolveRoots } from '../src/server/commands/cli-args.js'
 import { runStart } from '../src/server/commands/start.js'
 import { runStatus } from '../src/server/commands/status.js'
 import { runStop } from '../src/server/commands/stop.js'
 import { runAddRoot } from '../src/server/commands/add-root.js'
 import { runOpenFile } from '../src/server/commands/open-file.js'
+import { runCloseFile } from '../src/server/commands/close-file.js'
 import { startWithRotatedToken } from '../src/server/commands/rotate-restart.js'
 import { runDoctor } from '../src/server/doctor.js'
 import { getConfigDir, getStateDir } from '../src/server/xdg-paths.js'
@@ -108,6 +110,36 @@ function printOpenResult(result) {
   }
 }
 
+function printCloseResult(result, config) {
+  if (result.outcome === 'not-configured') {
+    console.log('Not configured yet. Run `md-viewer-server start --root <path>` first.')
+    process.exitCode = 1
+  } else if (result.outcome === 'not-running') {
+    console.error('Server is not running. Run `md-viewer-server start` first.')
+    process.exitCode = 1
+  } else if (result.outcome === 'closed') {
+    console.log(`Closed (root ${result.rootId}): ${result.relPath}`)
+  } else if (result.outcome === 'not-found') {
+    console.error('No open tab matches that path.')
+    process.exitCode = 1
+  } else if (result.outcome === 'ambiguous') {
+    console.error('Multiple open tabs match that filename. Retry with one of these full paths:')
+    for (const candidate of result.candidates) {
+      // config.roots is index-aligned with rootId (see close-file.js), so
+      // resolve back to an actual filesystem path the user can paste
+      // straight into `close` unambiguously, rather than just repeating
+      // the same bare filename that got them here.
+      const rootPath = config?.roots?.[candidate.rootId]
+      const fullPath = rootPath ? path.join(rootPath, candidate.relPath) : candidate.relPath
+      console.error(`  ${fullPath}`)
+    }
+    process.exitCode = 1
+  } else {
+    console.error(`Failed to close (status ${result.status}).`)
+    process.exitCode = 1
+  }
+}
+
 async function main() {
   const {
     command,
@@ -175,6 +207,16 @@ async function main() {
       return
     }
     printOpenResult(await runOpenFile(targetPath, { cwd: process.cwd() }))
+  } else if (command === 'close') {
+    const targetPath = positionals[0]
+    if (!targetPath) {
+      console.error('Usage: md-viewer-server close <path>')
+      process.exitCode = 1
+      return
+    }
+    const configDir = getConfigDir()
+    const result = await runCloseFile(targetPath, { configDir, cwd: process.cwd() })
+    printCloseResult(result, readConfig(configDir))
   } else if (command === 'doctor') {
     const configDir = getConfigDir()
     const stateDir = getStateDir()
@@ -192,7 +234,7 @@ async function main() {
     if (results.some((r) => r.status === 'fail')) process.exitCode = 1
   } else {
     console.error(
-      `Unknown command: ${command}\nUsage: md-viewer-server <start|stop|status|add-root|open|doctor> [options]`
+      `Unknown command: ${command}\nUsage: md-viewer-server <start|stop|status|add-root|open|close|doctor> [options]`
     )
     process.exitCode = 1
   }
