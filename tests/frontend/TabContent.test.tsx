@@ -201,6 +201,65 @@ describe('TabContent', () => {
     })
   })
 
+  describe('.mmd dispatch', () => {
+    it('renders MermaidBlock (not MarkdownView) for a .mmd file in view mode', () => {
+      render(
+        <TabContent
+          tab={makeTab({ relPath: 'diagram.mmd', content: 'graph TD; A-->B;', mtimeMs: 1 })}
+          onContentLoaded={() => {}}
+          onChange={() => {}}
+          onSave={() => {}}
+          allowHtmlScripts={false}
+          blockRemoteContent={false}
+          sendToPlantUmlServer={false}
+        />
+      )
+      expect(screen.getByTestId('mermaid-block')).toBeInTheDocument()
+      expect(screen.queryByTestId('markdown-view')).not.toBeInTheDocument()
+    })
+
+    it('renders MarkdownEditor (plain text) for a .mmd file in edit mode', () => {
+      render(
+        <TabContent
+          tab={makeTab({
+            relPath: 'diagram.mmd',
+            content: 'graph TD; A-->B;',
+            mtimeMs: 1,
+            mode: 'edit',
+          })}
+          onContentLoaded={() => {}}
+          onChange={() => {}}
+          onSave={() => {}}
+          allowHtmlScripts={false}
+          blockRemoteContent={false}
+          sendToPlantUmlServer={false}
+        />
+      )
+      expect(screen.getByRole('textbox')).toHaveValue('graph TD; A-->B;')
+    })
+
+    it('degrades split mode to plain-text editing (no live diagram preview) for a .mmd file', () => {
+      render(
+        <TabContent
+          tab={makeTab({
+            relPath: 'diagram.mmd',
+            content: 'graph TD; A-->B;',
+            mtimeMs: 1,
+            mode: 'split',
+          })}
+          onContentLoaded={() => {}}
+          onChange={() => {}}
+          onSave={() => {}}
+          allowHtmlScripts={false}
+          blockRemoteContent={false}
+          sendToPlantUmlServer={false}
+        />
+      )
+      expect(screen.getByRole('textbox')).toHaveValue('graph TD; A-->B;')
+      expect(screen.queryByTestId('mermaid-block')).not.toBeInTheDocument()
+    })
+  })
+
   it('shows a translated loading message, not a hardcoded English literal', () => {
     // Never resolves within the test's lifetime — only the transient loading
     // state (rendered before any fetch settles) is under test here.

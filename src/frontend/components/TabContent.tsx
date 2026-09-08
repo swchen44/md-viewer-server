@@ -7,6 +7,7 @@ import { MarkdownEditor } from './MarkdownEditor.js'
 import { SplitView } from './SplitView.js'
 import { HtmlView } from './HtmlView.js'
 import { PlantUmlView } from './PlantUmlView.js'
+import { MermaidBlock } from './MermaidBlock.js'
 
 interface TabContentProps {
   tab: Tab
@@ -102,6 +103,23 @@ export function TabContent({
   }
 
   const effectiveMode = tab.encoding === 'unknown' ? 'view' : tab.mode
+
+  // .mmd files render as a diagram in view mode by reusing the same
+  // MermaidBlock component that already renders ```mermaid fenced code
+  // blocks inside .md files (see MarkdownView.tsx) — no new Mermaid
+  // integration. Edit mode stays plain-text source editing (MarkdownEditor).
+  // Split mode intentionally degrades to the same plain-text editing as edit
+  // mode (no live diagram preview / no MermaidSplitView): the spec only
+  // requires .mmd to always render client-side, not that split mode support
+  // a live preview for this less-common file type, so that scope is left out
+  // for now (YAGNI) rather than adding a second split-view variant.
+  const isMermaid = tab.relPath.endsWith('.mmd')
+  if (isMermaid) {
+    if (effectiveMode === 'view') {
+      return <MermaidBlock definition={tab.content} />
+    }
+    return <MarkdownEditor value={tab.content} onChange={onChange} onSave={onSave} />
+  }
 
   if (effectiveMode === 'edit') {
     return <MarkdownEditor value={tab.content} onChange={onChange} onSave={onSave} />
