@@ -63,6 +63,19 @@ export function startServer({ logLevel = 'info' } = {}) {
   let wsServer = null
   const openSockets = new Set()
 
+  // createApp(...) happens before createWsServer(...) below (wsServer only
+  // exists once server.listen()'s callback runs), but REST routes need to
+  // call wsServer.broadcast(...) and a "start watching a new root" method.
+  // daemonControl is a mutable reference object handed to createApp/routers
+  // up front as a no-op placeholder; its methods are reassigned to the real
+  // implementations once wsServer actually exists. Routers always call
+  // daemonControl.broadcast(...)/daemonControl.addRootWatch(...) — never
+  // wsServer directly — so they don't need to care about this ordering.
+  const daemonControl = {
+    broadcast: () => {},
+    addRootWatch: () => {},
+  }
+
   async function gracefulShutdown(source) {
     logger.info({ source }, 'shutting down')
     if (wsServer) {
@@ -90,6 +103,7 @@ export function startServer({ logLevel = 'info' } = {}) {
     roots,
     extensions: FILE_EXTENSIONS,
     configDir,
+    daemonControl,
   })
 
   const server = http.createServer(app)
@@ -110,6 +124,9 @@ export function startServer({ logLevel = 'info' } = {}) {
     fs.writeFileSync(path.join(stateDir, 'server.pid'), String(process.pid))
     logger.info({ port: server.address().port }, 'server listening')
     wsServer = createWsServer(server, { token: config.token, roots })
+    daemonControl.broadcast = wsServer.broadcast.bind(wsServer)
+    // addRootWatch is wired to the watcher's real addRoot(...) in Task 3
+    // once that method exists; it stays a no-op until then.
   })
 
   return server
