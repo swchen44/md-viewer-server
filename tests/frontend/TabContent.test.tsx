@@ -93,6 +93,36 @@ describe('TabContent', () => {
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
   })
 
+  it('shows a non-UTF-8 encoding badge when tab.encoding is unknown', () => {
+    render(
+      <TabContent
+        tab={makeTab({ content: '�', mtimeMs: 1, encoding: 'unknown' })}
+        onContentLoaded={() => {}}
+        onChange={() => {}}
+        onSave={() => {}}
+        allowHtmlScripts={false}
+        blockRemoteContent={false}
+        sendToPlantUmlServer={false}
+      />
+    )
+    expect(screen.getByTestId('encoding-badge')).toHaveTextContent(en.tabContent.nonUtf8Encoding)
+  })
+
+  it('does not show the encoding badge for a normal UTF-8 file', () => {
+    render(
+      <TabContent
+        tab={makeTab({ content: '# Hi', mtimeMs: 1, encoding: 'utf-8' })}
+        onContentLoaded={() => {}}
+        onChange={() => {}}
+        onSave={() => {}}
+        allowHtmlScripts={false}
+        blockRemoteContent={false}
+        sendToPlantUmlServer={false}
+      />
+    )
+    expect(screen.queryByTestId('encoding-badge')).not.toBeInTheDocument()
+  })
+
   describe('.puml/.plantuml dispatch', () => {
     afterEach(() => vi.unstubAllGlobals())
 

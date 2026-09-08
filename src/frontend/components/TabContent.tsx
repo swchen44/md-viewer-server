@@ -99,14 +99,28 @@ export function TabContent({
     return <div>{t('tabContent.loading', 'Loading...')}</div>
   }
 
+  // Non-UTF-8 files can only be honestly labeled as "not UTF-8": the backend's
+  // isValidUtf8 check is a binary yes/no, not full charset detection (that
+  // would need a charset-sniffing library — out of scope / YAGNI). The badge
+  // is rendered above whichever view ends up below, regardless of file type.
+  const encodingBadge =
+    tab.encoding === 'unknown' ? (
+      <div data-testid="encoding-badge">
+        {t('tabContent.nonUtf8Encoding', 'Non-UTF-8 encoding — view only')}
+      </div>
+    ) : null
+
   const isHtml = tab.relPath.endsWith('.html')
   if (isHtml) {
     return (
-      <HtmlView
-        content={tab.content}
-        allowScripts={allowHtmlScripts}
-        blockRemoteContent={blockRemoteContent}
-      />
+      <>
+        {encodingBadge}
+        <HtmlView
+          content={tab.content}
+          allowScripts={allowHtmlScripts}
+          blockRemoteContent={blockRemoteContent}
+        />
+      </>
     )
   }
 
@@ -115,7 +129,12 @@ export function TabContent({
   // tab.mode entirely, same as isHtml above.
   const isPlantUml = tab.relPath.endsWith('.puml') || tab.relPath.endsWith('.plantuml')
   if (isPlantUml) {
-    return <PlantUmlView source={tab.content} sendToServer={sendToPlantUmlServer} />
+    return (
+      <>
+        {encodingBadge}
+        <PlantUmlView source={tab.content} sendToServer={sendToPlantUmlServer} />
+      </>
+    )
   }
 
   const effectiveMode = tab.encoding === 'unknown' ? 'view' : tab.mode
@@ -132,23 +151,46 @@ export function TabContent({
   const isMermaid = tab.relPath.endsWith('.mmd')
   if (isMermaid) {
     if (effectiveMode === 'view') {
-      return <MermaidBlock definition={tab.content} />
+      return (
+        <>
+          {encodingBadge}
+          <MermaidBlock definition={tab.content} />
+        </>
+      )
     }
-    return <MarkdownEditor value={tab.content} onChange={onChange} onSave={onSave} />
+    return (
+      <>
+        {encodingBadge}
+        <MarkdownEditor value={tab.content} onChange={onChange} onSave={onSave} />
+      </>
+    )
   }
 
   if (effectiveMode === 'edit') {
-    return <MarkdownEditor value={tab.content} onChange={onChange} onSave={onSave} />
+    return (
+      <>
+        {encodingBadge}
+        <MarkdownEditor value={tab.content} onChange={onChange} onSave={onSave} />
+      </>
+    )
   }
   if (effectiveMode === 'split') {
     return (
-      <SplitView
-        value={tab.content}
-        onChange={onChange}
-        onSave={onSave}
-        blockRemoteContent={blockRemoteContent}
-      />
+      <>
+        {encodingBadge}
+        <SplitView
+          value={tab.content}
+          onChange={onChange}
+          onSave={onSave}
+          blockRemoteContent={blockRemoteContent}
+        />
+      </>
     )
   }
-  return <MarkdownView content={tab.content} blockRemoteContent={blockRemoteContent} />
+  return (
+    <>
+      {encodingBadge}
+      <MarkdownView content={tab.content} blockRemoteContent={blockRemoteContent} />
+    </>
+  )
 }
