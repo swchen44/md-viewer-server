@@ -77,6 +77,23 @@ if (typeof globalThis.Worker === 'undefined') {
   })
 }
 
+// jsdom (this project's frontend test environment) does not implement
+// URL.createObjectURL/revokeObjectURL at all — real browsers always have
+// them. PlantUmlView (src/frontend/components/PlantUmlView.tsx) uses
+// createObjectURL to turn the proxy's PNG blob response into an <img> src,
+// so without a stand-in here every test exercising that path would hit
+// "URL.createObjectURL is not a function" and be swallowed by the
+// component's own error handling, never reaching the assertion under test.
+// Returns/accepts opaque blob: URLs — nothing reads their bytes in tests, so
+// no real blob storage is needed.
+if (typeof URL.createObjectURL !== 'function') {
+  let counter = 0
+  URL.createObjectURL = () => `blob:mock-${++counter}`
+}
+if (typeof URL.revokeObjectURL !== 'function') {
+  URL.revokeObjectURL = () => {}
+}
+
 afterEach(() => {
   cleanup()
 })

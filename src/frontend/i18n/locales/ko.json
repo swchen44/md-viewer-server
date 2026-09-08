@@ -28,6 +28,12 @@
     "loading": "불러오는 중...",
     "loadError": "이 파일을 불러오지 못했습니다"
   },
+  "plantumlView": {
+    "disabledHint": "이 다이어그램을 렌더링하려면 설정에서 \"다이어그램 소스를 PlantUML 서버로 전송\"을 활성화하고 서버를 지정하세요.",
+    "loading": "렌더링 중...",
+    "error": "이 PlantUML 다이어그램을 렌더링하지 못했습니다.",
+    "imageAlt": "렌더링된 PlantUML 다이어그램"
+  },
   "modeToggle": {
     "view": "보기",
     "edit": "편집",

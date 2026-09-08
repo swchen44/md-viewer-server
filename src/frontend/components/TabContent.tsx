@@ -6,6 +6,7 @@ import { MarkdownView } from './MarkdownView.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
 import { SplitView } from './SplitView.js'
 import { HtmlView } from './HtmlView.js'
+import { PlantUmlView } from './PlantUmlView.js'
 
 interface TabContentProps {
   tab: Tab
@@ -14,6 +15,7 @@ interface TabContentProps {
   onSave: () => void
   allowHtmlScripts: boolean
   blockRemoteContent: boolean
+  sendToPlantUmlServer: boolean
 }
 
 export function TabContent({
@@ -23,6 +25,7 @@ export function TabContent({
   onSave,
   allowHtmlScripts,
   blockRemoteContent,
+  sendToPlantUmlServer,
 }: TabContentProps) {
   const { t } = useTranslation()
   const [loadError, setLoadError] = useState(false)
@@ -88,6 +91,14 @@ export function TabContent({
         blockRemoteContent={blockRemoteContent}
       />
     )
+  }
+
+  // No view/edit/split split for diagram source — there's no "edit source
+  // while previewing" requirement in the spec (YAGNI), so this ignores
+  // tab.mode entirely, same as isHtml above.
+  const isPlantUml = tab.relPath.endsWith('.puml') || tab.relPath.endsWith('.plantuml')
+  if (isPlantUml) {
+    return <PlantUmlView source={tab.content} sendToServer={sendToPlantUmlServer} />
   }
 
   const effectiveMode = tab.encoding === 'unknown' ? 'view' : tab.mode

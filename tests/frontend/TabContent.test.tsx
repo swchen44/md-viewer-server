@@ -42,6 +42,7 @@ describe('TabContent', () => {
         onSave={() => {}}
         allowHtmlScripts={false}
         blockRemoteContent={false}
+        sendToPlantUmlServer={false}
       />
     )
     await waitFor(() => expect(onContentLoaded).toHaveBeenCalledWith('# Hi', 123, 'utf-8'))
@@ -56,6 +57,7 @@ describe('TabContent', () => {
         onSave={() => {}}
         allowHtmlScripts={false}
         blockRemoteContent={false}
+        sendToPlantUmlServer={false}
       />
     )
     expect(screen.getByTestId('markdown-view')).toBeInTheDocument()
@@ -70,6 +72,7 @@ describe('TabContent', () => {
         onSave={() => {}}
         allowHtmlScripts={false}
         blockRemoteContent={false}
+        sendToPlantUmlServer={false}
       />
     )
     expect(screen.getByTitle('html-preview')).toBeInTheDocument()
@@ -84,9 +87,60 @@ describe('TabContent', () => {
         onSave={() => {}}
         allowHtmlScripts={false}
         blockRemoteContent={false}
+        sendToPlantUmlServer={false}
       />
     )
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+  })
+
+  describe('.puml/.plantuml dispatch', () => {
+    afterEach(() => vi.unstubAllGlobals())
+
+    it('renders PlantUmlView for a .puml file, ignoring view/edit/split mode', () => {
+      render(
+        <TabContent
+          tab={makeTab({
+            relPath: 'diagram.puml',
+            content: '@startuml\nA -> B\n@enduml',
+            mtimeMs: 1,
+            mode: 'edit',
+          })}
+          onContentLoaded={() => {}}
+          onChange={() => {}}
+          onSave={() => {}}
+          allowHtmlScripts={false}
+          blockRemoteContent={false}
+          sendToPlantUmlServer={false}
+        />
+      )
+      expect(screen.getByText(/@startuml/)).toBeInTheDocument()
+      expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+    })
+
+    it('renders PlantUmlView for a .plantuml file and fetches the diagram when sendToPlantUmlServer is true', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(
+          new Response(new Blob(['fake-png-bytes']), { headers: { 'Content-Type': 'image/png' } })
+        )
+      )
+      render(
+        <TabContent
+          tab={makeTab({
+            relPath: 'diagram.plantuml',
+            content: '@startuml\nA -> B\n@enduml',
+            mtimeMs: 1,
+          })}
+          onContentLoaded={() => {}}
+          onChange={() => {}}
+          onSave={() => {}}
+          allowHtmlScripts={false}
+          blockRemoteContent={false}
+          sendToPlantUmlServer={true}
+        />
+      )
+      await waitFor(() => expect(screen.getByRole('img')).toBeInTheDocument())
+    })
   })
 
   // The setting is enforced in MarkdownView/HtmlView, so what matters here is
@@ -102,6 +156,7 @@ describe('TabContent', () => {
           onSave={() => {}}
           allowHtmlScripts={false}
           blockRemoteContent={true}
+          sendToPlantUmlServer={false}
         />
       )
       expect(screen.queryByRole('img')).not.toBeInTheDocument()
@@ -121,6 +176,7 @@ describe('TabContent', () => {
           onSave={() => {}}
           allowHtmlScripts={false}
           blockRemoteContent={true}
+          sendToPlantUmlServer={false}
         />
       )
       expect(screen.queryByRole('img')).not.toBeInTheDocument()
@@ -136,6 +192,7 @@ describe('TabContent', () => {
           onSave={() => {}}
           allowHtmlScripts={false}
           blockRemoteContent={true}
+          sendToPlantUmlServer={false}
         />
       )
       expect(screen.getByTitle('html-preview').getAttribute('srcdoc')).toContain(
@@ -156,6 +213,7 @@ describe('TabContent', () => {
         onSave={() => {}}
         allowHtmlScripts={false}
         blockRemoteContent={false}
+        sendToPlantUmlServer={false}
       />
     )
     expect(screen.getByText(en.tabContent.loading)).toBeInTheDocument()
@@ -177,6 +235,7 @@ describe('TabContent', () => {
         onSave={() => {}}
         allowHtmlScripts={false}
         blockRemoteContent={false}
+        sendToPlantUmlServer={false}
       />
     )
     await waitFor(() => expect(screen.getByText(/failed to load/i)).toBeInTheDocument())

@@ -28,6 +28,12 @@
     "loading": "载入中...",
     "loadError": "此文件载入失败"
   },
+  "plantumlView": {
+    "disabledHint": "请至设置中开启“将图表源码发送到 PlantUML 服务器”并指定服务器，才能渲染此图表。",
+    "loading": "渲染中...",
+    "error": "无法渲染此 PlantUML 图表。",
+    "imageAlt": "已渲染的 PlantUML 图表"
+  },
   "modeToggle": {
     "view": "查看",
     "edit": "编辑",

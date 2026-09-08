@@ -642,6 +642,9 @@ export function App() {
                     // phone home during the window where we cannot yet tell
                     // whether privacy mode is on.
                     blockRemoteContent={settings?.effective?.blockRemoteContent ?? true}
+                    // Same safe-default reasoning: while settings are unknown,
+                    // never let PlantUmlView call the proxy.
+                    sendToPlantUmlServer={settings?.effective?.sendToPlantUmlServer ?? false}
                   />
                 </div>
                 {saveError && saveError.tabId === activeTab.id && (

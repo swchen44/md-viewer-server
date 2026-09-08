@@ -10,7 +10,18 @@ import { createWsServer } from './ws-server.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-const FILE_EXTENSIONS = ['.md', '.markdown', '.mkd', '.mdx', '.mdc', '.txt', '.mmd', '.html']
+const FILE_EXTENSIONS = [
+  '.md',
+  '.markdown',
+  '.mkd',
+  '.mdx',
+  '.mdc',
+  '.txt',
+  '.mmd',
+  '.html',
+  '.puml',
+  '.plantuml',
+]
 
 function readPackageVersion() {
   if (typeof __MVS_BUNDLED_VERSION__ !== 'undefined') {

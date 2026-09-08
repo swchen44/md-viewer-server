@@ -28,6 +28,12 @@
     "loading": "Loading...",
     "loadError": "Failed to load this file"
   },
+  "plantumlView": {
+    "disabledHint": "Enable \"Send diagram source to PlantUML server\" in Settings and specify a server to render this diagram.",
+    "loading": "Rendering...",
+    "error": "Failed to render this PlantUML diagram.",
+    "imageAlt": "Rendered PlantUML diagram"
+  },
   "modeToggle": {
     "view": "View",
     "edit": "Edit",

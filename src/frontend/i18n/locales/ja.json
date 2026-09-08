@@ -28,6 +28,12 @@
     "loading": "読み込み中...",
     "loadError": "このファイルの読み込みに失敗しました"
   },
+  "plantumlView": {
+    "disabledHint": "この図をレンダリングするには、設定で「図の元データを PlantUML サーバーに送信」を有効にし、サーバーを指定してください。",
+    "loading": "レンダリング中...",
+    "error": "この PlantUML 図のレンダリングに失敗しました。",
+    "imageAlt": "レンダリングされた PlantUML 図"
+  },
   "modeToggle": {
     "view": "表示",
     "edit": "編集",
