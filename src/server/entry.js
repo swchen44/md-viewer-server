@@ -61,6 +61,7 @@ export function startServer({ logLevel = 'info' } = {}) {
   }))
 
   let wsServer = null
+  const openSockets = new Set()
 
   async function gracefulShutdown(source) {
     logger.info({ source }, 'shutting down')
@@ -71,6 +72,13 @@ export function startServer({ logLevel = 'info' } = {}) {
       logger.info({}, 'server closed')
       process.exit(0)
     })
+    // server.close()'s callback only fires once every currently-open socket
+    // has closed on its own, which a long-lived client (a WebSocket, or a
+    // fresh reconnect landing mid-shutdown) may never do. Forcibly destroy
+    // whatever is still open so shutdown always completes promptly.
+    for (const socket of openSockets) {
+      socket.destroy()
+    }
   }
 
   const app = createApp({
@@ -85,6 +93,11 @@ export function startServer({ logLevel = 'info' } = {}) {
   })
 
   const server = http.createServer(app)
+
+  server.on('connection', (socket) => {
+    openSockets.add(socket)
+    socket.on('close', () => openSockets.delete(socket))
+  })
 
   process.on('SIGTERM', () => gracefulShutdown('signal'))
 
