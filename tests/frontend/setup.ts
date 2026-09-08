@@ -94,6 +94,37 @@ if (typeof URL.revokeObjectURL !== 'function') {
   URL.revokeObjectURL = () => {}
 }
 
+// Node's global `WebSocket` (available natively since Node 18/22, undici-
+// based) is a REAL network client — unlike Worker/URL.createObjectURL above,
+// which jsdom simply doesn't implement, this one exists and would actually
+// attempt a live connection to whatever ws:// URL is passed to it (e.g. from
+// src/frontend/hooks/useFileWatcher.ts, which App.tsx now uses
+// unconditionally on every render). Left as-is, every test that renders
+// <App> would open a real connection attempt against a nonexistent server,
+// and useFileWatcher's own reconnect-on-close timer would keep retrying every
+// 3s — a lingering timer/socket that can outlive the test that created it,
+// the same "orphaned background process" risk this repo's CLAUDE.md calls
+// out for vitest workers. Replace it by default with an inert stand-in that
+// never actually connects and never fires any callback on its own. A test
+// that needs to inspect real WebSocket message/reconnect behavior overrides
+// this locally with `vi.stubGlobal('WebSocket', ...)` (see
+// useFileWatcher.test.ts) — `vi.unstubAllGlobals()` in that test's own
+// afterEach restores this default again.
+class TestNoopWebSocket {
+  onmessage: ((event: { data: string }) => void) | null = null
+  onopen: (() => void) | null = null
+  onclose: (() => void) | null = null
+  onerror: (() => void) | null = null
+  constructor(public url: string) {}
+  close() {}
+  send() {}
+}
+Object.defineProperty(globalThis, 'WebSocket', {
+  value: TestNoopWebSocket,
+  configurable: true,
+  writable: true,
+})
+
 afterEach(() => {
   cleanup()
 })

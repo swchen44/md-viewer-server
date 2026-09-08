@@ -15,6 +15,7 @@ import { PathModal } from './components/PathModal.js'
 import { useDraft } from './hooks/useDraft.js'
 import { useSettings } from './hooks/useSettings.js'
 import { useLocalPrefs } from './hooks/useLocalPrefs.js'
+import { useFileWatcher } from './hooks/useFileWatcher.js'
 import { resolveEffectiveCustomCss } from './custom-css-presets.js'
 
 interface Conflict {
@@ -61,6 +62,14 @@ export function App() {
   const [pathModalOpen, setPathModalOpen] = useState(false)
   const [currentPath, setCurrentPath] = useState<string | null>(null)
   const [updateAvailable, setUpdateAvailable] = useState<{ latestVersion: string } | null>(null)
+  // Tab ids whose on-disk file changed (per the daemon's `file-changed` WS
+  // event — see useFileWatcher) while either the tab was dirty (an unsaved
+  // edit in progress) or autoReloadViewingTabs is off. Either way the tab's
+  // in-memory content is deliberately left untouched — see handleFileChanged
+  // below — this is only a passive "heads up" indicator, not stored on the
+  // Tab itself (kept as separate App-level state) since it's ephemeral UI
+  // state, not something that needs to round-trip through useDraft/tabs.
+  const [externallyModifiedTabIds, setExternallyModifiedTabIds] = useState<Set<string>>(new Set())
   const { settings, updateSettings } = useSettings()
   const { prefs, setPref } = useLocalPrefs()
   // The effective CSS content is derived straight from backend-persisted
@@ -168,6 +177,34 @@ export function App() {
     // the tab it was about should not let it resurface against a same-id
     // reopen.
     setSaveError((prev) => (prev?.tabId === id ? null : prev))
+    // And again for the "externally modified" flag (see useFileWatcher wiring
+    // below): reopening the same file (same deterministic id) should start
+    // from a clean slate, not resurrect a notice about a disk change that may
+    // no longer even be true by the time it's reopened.
+    clearExternallyModified(id)
+  }
+
+  // Removes tabId from externallyModifiedTabIds if present, otherwise leaves
+  // the Set reference untouched so callers can call this unconditionally
+  // (e.g. on every successful save) without forcing an extra re-render.
+  function clearExternallyModified(tabId: string) {
+    setExternallyModifiedTabIds((prev) => {
+      if (!prev.has(tabId)) return prev
+      const next = new Set(prev)
+      next.delete(tabId)
+      return next
+    })
+  }
+
+  // Mirrors clearExternallyModified above: only creates a new Set when tabId
+  // isn't already flagged.
+  function markExternallyModified(tabId: string) {
+    setExternallyModifiedTabIds((prev) => {
+      if (prev.has(tabId)) return prev
+      const next = new Set(prev)
+      next.add(tabId)
+      return next
+    })
   }
 
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null
@@ -334,6 +371,11 @@ export function App() {
         )
         if (unchanged) {
           clearDraft()
+          // A successful, non-stale save means whatever on-disk change
+          // previously flagged this tab (if any) is now superseded by what
+          // was just written — the 409 branch just below is what would have
+          // fired instead if the on-disk content actually still conflicted.
+          clearExternallyModified(tabId)
         }
         setSaveError(null)
         return
@@ -393,6 +435,7 @@ export function App() {
         )
         if (unchanged) {
           clearDraft()
+          clearExternallyModified(tab.id)
         }
       } else {
         console.error('Failed to force-save file', res.status)
@@ -421,6 +464,11 @@ export function App() {
       )
     )
     clearDraft()
+    // handleDiscardMine already adopts conflict.currentContent (the on-disk
+    // content) as the tab's new content above, which IS the acknowledgment of
+    // whatever external change triggered the flag — nothing left to warn
+    // about.
+    clearExternallyModified(conflict.tabId)
     setConflict(null)
   }
 
@@ -444,6 +492,78 @@ export function App() {
     ])
     setActiveTabId(id)
   }
+
+  // Re-fetches this tab's content straight from the server and replaces it in
+  // place — used when a live file-changed event arrives for a tab that's safe
+  // to auto-refresh (see handleFileChanged below: not dirty, and
+  // autoReloadViewingTabs is on). Deliberately independent of TabContent's own
+  // load-on-null-content effect (TabContent only fetches once, when
+  // tab.content is still null) since this needs to re-fetch content that's
+  // already loaded.
+  async function reloadTabContent(tabId: string, rootId: number, relPath: string) {
+    try {
+      const res = await apiFetch(`/api/file?root=${rootId}&path=${encodeURIComponent(relPath)}`)
+      if (!res.ok) return
+      const data = await res.json()
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.id === tabId ? { ...t, content: data.content, mtimeMs: data.mtimeMs, encoding: data.encoding } : t
+        )
+      )
+      clearExternallyModified(tabId)
+    } catch {
+      // Network hiccup mid-reload — leave the tab's previous content in
+      // place rather than surfacing an error for what's just a best-effort
+      // live-update; the next file-changed event (or a manual reopen) can
+      // retry.
+    }
+  }
+
+  // Forces FileTreePanel to refetch every root's file list: its own fetch
+  // effect (src/frontend/components/FileTreePanel.tsx) is keyed on the
+  // identity of the `roots` array, so handing it a new array (same root
+  // objects, new outer reference) re-triggers that effect without needing to
+  // change FileTreePanel's props/interface at all. This refreshes ALL roots
+  // rather than just the one a file-added/file-removed event named — a
+  // deliberately blunt approach per the task brief (YAGNI: a precise
+  // per-root/partial-tree update is a performance optimization, not a
+  // correctness requirement).
+  function refreshFileTree() {
+    setRoots((prev) => [...prev])
+  }
+
+  // file-changed event handler for useFileWatcher (see below). Only acts on
+  // files that are actually open as a tab; other files changing on disk have
+  // nothing in the UI to update yet (FileTreePanel doesn't show mtimes).
+  function handleFileChanged(rootId: number, relPath: string) {
+    // tabsRef, not `tabs`: this callback is handed to useFileWatcher once and
+    // then called from a long-lived WebSocket message handler, potentially
+    // long after the render that created this closure — see tabsRef's own
+    // comment near the top of this component for why the ref (not the `tabs`
+    // this closure captured) is the one guaranteed to be current.
+    const tab = tabsRef.current.find((t) => t.rootId === rootId && t.relPath === relPath)
+    if (!tab) return
+    // A dirty tab can NEVER be silently overwritten here, regardless of
+    // autoReloadViewingTabs — that pref only controls how eagerly a clean
+    // tab picks up external changes, not whether an in-progress edit is safe
+    // to discard. This is the first line of defense against silently losing
+    // unsaved work; the real conflict check still happens at save time via
+    // the existing PUT /api/file 409 flow (see handleSave/putFile above) —
+    // this only prevents the softer, sneakier case of the *displayed*
+    // content changing out from under someone who hasn't tried to save yet.
+    if (tab.dirty || !prefs.autoReloadViewingTabs) {
+      markExternallyModified(tab.id)
+      return
+    }
+    reloadTabContent(tab.id, rootId, relPath)
+  }
+
+  // Connects once to the daemon's /ws and stays connected for the app's
+  // lifetime (see useFileWatcher.ts for the reconnect-on-disconnect
+  // behavior). file-added/file-removed both just need "the file tree might be
+  // stale" — refreshFileTree() is shared for both rather than distinguishing
+  // which file changed, per the brief's YAGNI note on partial tree updates.
+  useFileWatcher(handleFileChanged, refreshFileTree, refreshFileTree)
 
   async function handleFileSearch(query: string, options: FilesSearchOptions) {
     const seq = ++fileSearchSeqRef.current
@@ -647,6 +767,18 @@ export function App() {
                     sendToPlantUmlServer={settings?.effective?.sendToPlantUmlServer ?? false}
                   />
                 </div>
+                {externallyModifiedTabIds.has(activeTab.id) &&
+                  (!conflict || conflict.tabId !== activeTab.id) && (
+                    // Passive notice only — see handleFileChanged above for why
+                    // this never auto-replaces the tab's content itself. The
+                    // conflict dialog (below) is a stronger, more actionable
+                    // signal for the same underlying situation, so this stays
+                    // hidden while that's showing for this tab rather than
+                    // stacking both.
+                    <div data-testid="file-updated-banner" role="status" style={{ padding: '4px 12px', color: '#8a6d00' }}>
+                      {t('app.fileUpdatedExternally', 'This file changed on disk.')}
+                    </div>
+                  )}
                 {saveError && saveError.tabId === activeTab.id && (
                   <div data-testid="save-error" role="alert" style={{ padding: '4px 12px', color: '#b00020' }}>
                     {saveError.message}
