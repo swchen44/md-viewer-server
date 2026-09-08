@@ -1417,3 +1417,68 @@ describe('App file-removed read-only wiring', () => {
     expect(screen.queryByTestId('deleted-badge')).not.toBeInTheDocument()
   })
 })
+
+describe('App undo-close affordance', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+  })
+
+  // Opens a.md and closes it, landing right after the tab has disappeared from
+  // the tab bar — the moment the undo prompt is expected to appear.
+  async function openAndCloseFileTab() {
+    vi.useFakeTimers()
+    const fetchMock = stubRoutedFetch([
+      { match: '/api/roots', response: [{ id: 0, name: 'proj' }] },
+      { match: '/api/files', response: { files: [{ relPath: 'a.md', size: 5, mtimeMs: 1 }] } },
+      { match: '/api/file?', response: { content: '# Hi', mtimeMs: 1, encoding: 'utf-8' } },
+    ])
+    render(<App />)
+    await vi.waitFor(() => expect(screen.getByText('a.md')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('a.md'))
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'close a.md' })).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: 'close a.md' }))
+    await vi.waitFor(() => expect(screen.queryByRole('button', { name: 'close a.md' })).not.toBeInTheDocument())
+
+    return fetchMock
+  }
+
+  it('shows an undo prompt in the bottom-right corner after closing a tab', async () => {
+    await openAndCloseFileTab()
+
+    const toast = screen.getByTestId('undo-close-toast')
+    expect(toast).toBeInTheDocument()
+    expect(toast).toHaveStyle({ position: 'fixed' })
+    expect(screen.getByRole('button', { name: /undo/i })).toBeInTheDocument()
+  })
+
+  it('auto-dismisses the undo prompt after 5 seconds', async () => {
+    await openAndCloseFileTab()
+    expect(screen.getByTestId('undo-close-toast')).toBeInTheDocument()
+
+    await vi.advanceTimersByTimeAsync(5000)
+
+    expect(screen.queryByTestId('undo-close-toast')).not.toBeInTheDocument()
+  })
+
+  it('clicking the undo prompt reopens the closed tab via openFile', async () => {
+    await openAndCloseFileTab()
+
+    fireEvent.click(screen.getByRole('button', { name: /undo/i }))
+
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'close a.md' })).toBeInTheDocument())
+    await vi.waitFor(() => expect(screen.getByRole('heading', { name: 'Hi' })).toBeInTheDocument())
+  })
+
+  it('clears the undo prompt immediately on click, so it cannot be double-fired', async () => {
+    await openAndCloseFileTab()
+
+    fireEvent.click(screen.getByRole('button', { name: /undo/i }))
+
+    // Synchronous check, not wrapped in waitFor: the prompt must be gone the
+    // instant the click handler runs, before any async reopen work settles —
+    // otherwise a second click during that window could reopen the file twice.
+    expect(screen.queryByTestId('undo-close-toast')).not.toBeInTheDocument()
+  })
+})

@@ -29,6 +29,15 @@ interface SaveError {
   message: string
 }
 
+interface LastClosedTab {
+  rootId: number
+  relPath: string
+  title: string
+}
+
+// How long the undo-close toast stays on screen before auto-dismissing.
+const UNDO_CLOSE_TIMEOUT_MS = 5000
+
 // Matches SearchBar.tsx's established 300ms debounce convention — see
 // handleChange below for what this actually debounces (only the localStorage
 // write, not the in-memory content update).
@@ -58,6 +67,15 @@ export function App() {
   const [outlineSearchFilter, setOutlineSearchFilter] = useState<HeadingFilter | null>(null)
   const [conflict, setConflict] = useState<Conflict | null>(null)
   const [saveError, setSaveError] = useState<SaveError | null>(null)
+  // Single-slot "undo close" state — deliberately not a stack (YAGNI per the
+  // task brief: multi-level undo's value doesn't justify the complexity).
+  // Closing a second tab while one undo prompt is already showing simply
+  // replaces it; there is no way to recover the first one once superseded.
+  const [lastClosedTab, setLastClosedTab] = useState<LastClosedTab | null>(null)
+  // Tracks the pending auto-dismiss timer so a second close (replacing the
+  // prompt) or a click on Undo can cancel the stale one instead of letting it
+  // fire later and clear a *different* tab's now-current prompt.
+  const lastClosedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [pathModalOpen, setPathModalOpen] = useState(false)
   const [currentPath, setCurrentPath] = useState<string | null>(null)
@@ -187,6 +205,19 @@ export function App() {
     const closing = tabsRef.current.find((t) => t.id === id)
     if (syncToDaemon && closing) {
       syncTabToDaemon('DELETE', closing.rootId, closing.relPath)
+    }
+    // Record this close as the one undo-able slot, regardless of whether it
+    // was triggered locally or by a remote tab-closed event — either way the
+    // tab just disappeared from this browser, so "undo" is equally meaningful
+    // for both. A previous still-pending prompt (its own timer not yet fired)
+    // is superseded, not stacked — see lastClosedTab's declaration comment.
+    if (closing) {
+      if (lastClosedTimeoutRef.current) clearTimeout(lastClosedTimeoutRef.current)
+      setLastClosedTab({ rootId: closing.rootId, relPath: closing.relPath, title: closing.title })
+      lastClosedTimeoutRef.current = setTimeout(() => {
+        setLastClosedTab(null)
+        lastClosedTimeoutRef.current = null
+      }, UNDO_CLOSE_TIMEOUT_MS)
     }
     setTabs((prev) => prev.filter((t) => t.id !== id))
     setActiveTabId((prev) => (prev === id ? null : prev))
@@ -548,6 +579,24 @@ export function App() {
     // the daemon already has it, and re-broadcasting would pull every other
     // client's focus around just because this user clicked a tab.
     setActiveTabId(id)
+  }
+
+  // Undo-close click handler. Clears lastClosedTab (and its pending
+  // auto-dismiss timer) FIRST, synchronously, before calling openFile — so the
+  // prompt is gone the instant this runs and a second click (or the timer
+  // firing moments later) has nothing left to act on. Reuses openFile as-is,
+  // with its default syncToDaemon=true: reopening via undo is exactly as much
+  // a genuine local user action as clicking the file in the sidebar, so the
+  // daemon/other browsers should learn about it the same way.
+  function handleUndoClose() {
+    if (!lastClosedTab) return
+    if (lastClosedTimeoutRef.current) {
+      clearTimeout(lastClosedTimeoutRef.current)
+      lastClosedTimeoutRef.current = null
+    }
+    const { rootId, relPath } = lastClosedTab
+    setLastClosedTab(null)
+    openFile(rootId, relPath)
   }
 
   // Re-fetches this tab's content straight from the server and replaces it in
@@ -955,6 +1004,28 @@ export function App() {
           </div>
         </div>
       </div>
+      {lastClosedTab && (
+        <div
+          data-testid="undo-close-toast"
+          role="status"
+          style={{
+            position: 'fixed',
+            bottom: 16,
+            right: 16,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            padding: '8px 12px',
+            borderRadius: 4,
+            background: '#333',
+            color: '#fff',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+          }}
+        >
+          <span>{t('app.tabClosed', 'Closed "{{title}}"', { title: lastClosedTab.title })}</span>
+          <button onClick={handleUndoClose}>{t('app.undoClose', 'Undo')}</button>
+        </div>
+      )}
     </div>
   )
 }
