@@ -110,6 +110,80 @@ describe('createWatcher', () => {
     }
   })
 
+  describe('addRoot', () => {
+    let secondRootDir
+
+    afterEach(() => {
+      if (secondRootDir) fs.rmSync(secondRootDir, { recursive: true, force: true })
+      secondRootDir = undefined
+    })
+
+    it('starts watching a newly added root and forwards its file events through the same onEvent callback', async () => {
+      secondRootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'watcher-second-'))
+      const onEvent = vi.fn()
+      watcher = createWatcher([{ id: 0, path: rootDir }], onEvent)
+      await new Promise((resolve) => setTimeout(resolve, 300))
+
+      watcher.addRoot({ id: 1, path: secondRootDir })
+      await new Promise((resolve) => setTimeout(resolve, 300)) // let chokidar finish initial scan of the new root
+
+      fs.writeFileSync(path.join(secondRootDir, 'new.md'), 'hi')
+
+      await vi.waitFor(
+        () => {
+          expect(onEvent).toHaveBeenCalledWith(
+            expect.objectContaining({ type: 'file-added', rootId: 1, relPath: 'new.md' })
+          )
+        },
+        { timeout: 2000 }
+      )
+    })
+
+    it('still watches the original root after addRoot (both roots stay live)', async () => {
+      secondRootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'watcher-second-'))
+      const onEvent = vi.fn()
+      watcher = createWatcher([{ id: 0, path: rootDir }], onEvent)
+      await new Promise((resolve) => setTimeout(resolve, 300))
+
+      watcher.addRoot({ id: 1, path: secondRootDir })
+      await new Promise((resolve) => setTimeout(resolve, 300))
+
+      fs.writeFileSync(path.join(rootDir, 'still-watched.md'), 'hi')
+
+      await vi.waitFor(
+        () => {
+          expect(onEvent).toHaveBeenCalledWith(
+            expect.objectContaining({ type: 'file-added', rootId: 0, relPath: 'still-watched.md' })
+          )
+        },
+        { timeout: 2000 }
+      )
+    })
+
+    it('close() also closes a watcher added via addRoot', async () => {
+      const fakeWatcherA = new EventEmitter()
+      fakeWatcherA.close = vi.fn(() => Promise.resolve())
+      const fakeWatcherB = new EventEmitter()
+      fakeWatcherB.close = vi.fn(() => Promise.resolve())
+      const watchSpy = vi
+        .spyOn(chokidar, 'watch')
+        .mockReturnValueOnce(fakeWatcherA)
+        .mockReturnValueOnce(fakeWatcherB)
+
+      const onEvent = vi.fn()
+      watcher = createWatcher([{ id: 0, path: rootDir }], onEvent)
+      watcher.addRoot({ id: 1, path: '/some/other/path' })
+
+      await watcher.close()
+
+      expect(fakeWatcherA.close).toHaveBeenCalled()
+      expect(fakeWatcherB.close).toHaveBeenCalled()
+
+      watchSpy.mockRestore()
+      watcher = null // already closed above; afterEach should not close again
+    })
+  })
+
   it('forwards a watcher error to onEvent as watch-error, without throwing', () => {
     // Synthetic error via a spied-in fake FSWatcher — avoids depending on the
     // OS/sandbox actually surfacing a real fs error (e.g. EACCES) within a

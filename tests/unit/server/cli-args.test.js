@@ -30,6 +30,15 @@ describe('parseArgs', () => {
     expect(parseArgs(['start', '--rotate-token']).rotateToken).toBe(true)
     expect(parseArgs(['start']).rotateToken).toBe(false)
   })
+
+  it('collects a positional argument (e.g. the path for `add-root <path>`)', () => {
+    const result = parseArgs(['add-root', '/some/path'])
+    expect(result.positionals).toEqual(['/some/path'])
+  })
+
+  it('leaves positionals empty when no positional argument is given', () => {
+    expect(parseArgs(['status']).positionals).toEqual([])
+  })
 })
 
 describe('resolveRoots', () => {

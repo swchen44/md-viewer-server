@@ -3,6 +3,7 @@ import { parseArgs, resolveRoots } from '../src/server/commands/cli-args.js'
 import { runStart } from '../src/server/commands/start.js'
 import { runStatus } from '../src/server/commands/status.js'
 import { runStop } from '../src/server/commands/stop.js'
+import { runAddRoot } from '../src/server/commands/add-root.js'
 import { startWithRotatedToken } from '../src/server/commands/rotate-restart.js'
 import { runDoctor } from '../src/server/doctor.js'
 import { getConfigDir, getStateDir } from '../src/server/xdg-paths.js'
@@ -60,10 +61,38 @@ function printStopResult(result) {
   }
 }
 
+function printAddRootResult(result) {
+  if (result.outcome === 'not-configured') {
+    console.log('Not configured yet. Run `md-viewer-server start --root <path>` first.')
+    process.exitCode = 1
+  } else if (result.outcome === 'not-running') {
+    console.error('Server is not running. Run `md-viewer-server start` first.')
+    process.exitCode = 1
+  } else if (result.outcome === 'added') {
+    console.log(`Added root: ${result.name} (id ${result.rootId}).`)
+  } else if (result.outcome === 'invalid-path') {
+    console.error('Path does not exist or is not readable.')
+    process.exitCode = 1
+  } else if (result.outcome === 'overlaps-existing') {
+    console.error(
+      `Path overlaps an existing root (id ${result.existingRootId}): identical to, or nested with, a root that is already being served.`
+    )
+    process.exitCode = 1
+  } else {
+    console.error(`Failed to add root (status ${result.status}).`)
+    process.exitCode = 1
+  }
+}
+
 async function main() {
-  const { command, roots: rawRoots, port, debug, rotateToken: shouldRotateToken } = parseArgs(
-    process.argv.slice(2)
-  )
+  const {
+    command,
+    roots: rawRoots,
+    port,
+    debug,
+    rotateToken: shouldRotateToken,
+    positionals,
+  } = parseArgs(process.argv.slice(2))
 
   if (command === 'start') {
     const roots = resolveRoots(rawRoots, process.cwd())
@@ -106,6 +135,14 @@ async function main() {
     printStatusResult(await runStatus())
   } else if (command === 'stop') {
     printStopResult(await runStop())
+  } else if (command === 'add-root') {
+    const rootPath = positionals[0]
+    if (!rootPath) {
+      console.error('Usage: md-viewer-server add-root <path>')
+      process.exitCode = 1
+      return
+    }
+    printAddRootResult(await runAddRoot(rootPath))
   } else if (command === 'doctor') {
     const configDir = getConfigDir()
     const stateDir = getStateDir()
@@ -123,7 +160,7 @@ async function main() {
     if (results.some((r) => r.status === 'fail')) process.exitCode = 1
   } else {
     console.error(
-      `Unknown command: ${command}\nUsage: md-viewer-server <start|stop|status|doctor> [options]`
+      `Unknown command: ${command}\nUsage: md-viewer-server <start|stop|status|add-root|doctor> [options]`
     )
     process.exitCode = 1
   }

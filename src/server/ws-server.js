@@ -34,6 +34,9 @@ export function createWsServer(httpServer, { token, roots }) {
     broadcast(event) {
       broadcastToClients(event)
     },
+    addRoot(root) {
+      watcher.addRoot(root)
+    },
     async close() {
       for (const client of wss.clients) {
         client.terminate()

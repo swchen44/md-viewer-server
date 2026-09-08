@@ -125,8 +125,7 @@ export function startServer({ logLevel = 'info' } = {}) {
     logger.info({ port: server.address().port }, 'server listening')
     wsServer = createWsServer(server, { token: config.token, roots })
     daemonControl.broadcast = wsServer.broadcast.bind(wsServer)
-    // addRootWatch is wired to the watcher's real addRoot(...) in Task 3
-    // once that method exists; it stays a no-op until then.
+    daemonControl.addRootWatch = wsServer.addRoot.bind(wsServer)
   })
 
   return server

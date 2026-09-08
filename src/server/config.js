@@ -41,6 +41,16 @@ export function loadOrCreateConfig(configDir, { roots, port }) {
   return config
 }
 
+export function appendRoot(configDir, rootPath) {
+  const existing = readConfig(configDir)
+  if (!existing) {
+    throw new Error('No config.json found; nothing to append to. Run `start` first.')
+  }
+  const updated = { ...existing, roots: [...existing.roots, rootPath] }
+  fs.writeFileSync(getConfigPath(configDir), JSON.stringify(updated, null, 2))
+  return updated
+}
+
 export function rotateToken(configDir) {
   const existing = readConfig(configDir)
   if (!existing) {

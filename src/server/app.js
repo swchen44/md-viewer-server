@@ -64,7 +64,7 @@ export function createApp({
   })
 
   const authMiddleware = createAuthMiddleware(config)
-  app.use('/api', authMiddleware, createRootsRouter(roots))
+  app.use('/api', authMiddleware, createRootsRouter(roots, { configDir, daemonControl }))
   app.use('/api', authMiddleware, createFilesRouter(roots, extensions))
   app.use('/api', authMiddleware, createFileRouter(roots, configDir))
   app.use('/api', authMiddleware, createFilePathRouter(roots))

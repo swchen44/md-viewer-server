@@ -8,6 +8,7 @@ import {
   readConfig,
   loadOrCreateConfig,
   rotateToken,
+  appendRoot,
 } from '../../../src/server/config.js'
 
 describe('generateToken', () => {
@@ -106,5 +107,39 @@ describe('config file management', () => {
     const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rotate-empty-'))
     expect(() => rotateToken(emptyDir)).toThrow()
     fs.rmSync(emptyDir, { recursive: true, force: true })
+  })
+
+  describe('appendRoot', () => {
+    it('appends a new root path and persists it to config.json', () => {
+      loadOrCreateConfig(dir, { roots: ['/tmp/a'], port: 4173 })
+      const updated = appendRoot(dir, '/tmp/b')
+      expect(updated.roots).toEqual(['/tmp/a', '/tmp/b'])
+      expect(readConfig(dir).roots).toEqual(['/tmp/a', '/tmp/b'])
+    })
+
+    it('preserves other config fields (token, port, settings) untouched', () => {
+      const original = loadOrCreateConfig(dir, { roots: ['/tmp/a'], port: 4173 })
+      const withSetting = { ...readConfig(dir), plantumlServerUrl: 'http://plantuml.internal:8080' }
+      fs.writeFileSync(getConfigPath(dir), JSON.stringify(withSetting, null, 2))
+
+      const updated = appendRoot(dir, '/tmp/b')
+
+      expect(updated.token).toBe(original.token)
+      expect(updated.port).toBe(4173)
+      expect(updated.plantumlServerUrl).toBe('http://plantuml.internal:8080')
+    })
+
+    it('the appended root survives being re-read as if after a daemon restart', () => {
+      loadOrCreateConfig(dir, { roots: ['/tmp/a'], port: 4173 })
+      appendRoot(dir, '/tmp/b')
+      const rereadAfterRestart = readConfig(dir)
+      expect(rereadAfterRestart.roots).toEqual(['/tmp/a', '/tmp/b'])
+    })
+
+    it('throws if no config exists yet', () => {
+      const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'append-root-empty-'))
+      expect(() => appendRoot(emptyDir, '/tmp/a')).toThrow()
+      fs.rmSync(emptyDir, { recursive: true, force: true })
+    })
   })
 })
