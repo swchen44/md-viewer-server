@@ -7,6 +7,7 @@ import { runStop } from '../src/server/commands/stop.js'
 import { runAddRoot } from '../src/server/commands/add-root.js'
 import { runOpenFile } from '../src/server/commands/open-file.js'
 import { runCloseFile } from '../src/server/commands/close-file.js'
+import { runListTabs } from '../src/server/commands/list-tabs.js'
 import { startWithRotatedToken } from '../src/server/commands/rotate-restart.js'
 import { runDoctor } from '../src/server/doctor.js'
 import { getConfigDir, getStateDir } from '../src/server/xdg-paths.js'
@@ -140,6 +141,23 @@ function printCloseResult(result, config) {
   }
 }
 
+function printListTabsResult(result) {
+  if (result.outcome === 'not-configured') {
+    console.log('Not configured yet. Run `md-viewer-server start --root <path>` first.')
+  } else if (result.outcome === 'not-running') {
+    console.error('Server is not running. Run `md-viewer-server start` first.')
+    process.exitCode = 1
+  } else if (result.outcome === 'listed') {
+    if (result.tabs.length === 0) {
+      console.log('No tabs open.')
+    } else {
+      for (const tab of result.tabs) {
+        console.log(`${tab.rootName}: ${tab.relPath}`)
+      }
+    }
+  }
+}
+
 async function main() {
   const {
     command,
@@ -217,6 +235,8 @@ async function main() {
     const configDir = getConfigDir()
     const result = await runCloseFile(targetPath, { configDir, cwd: process.cwd() })
     printCloseResult(result, readConfig(configDir))
+  } else if (command === 'tabs') {
+    printListTabsResult(await runListTabs())
   } else if (command === 'doctor') {
     const configDir = getConfigDir()
     const stateDir = getStateDir()
@@ -234,7 +254,7 @@ async function main() {
     if (results.some((r) => r.status === 'fail')) process.exitCode = 1
   } else {
     console.error(
-      `Unknown command: ${command}\nUsage: md-viewer-server <start|stop|status|add-root|open|close|doctor> [options]`
+      `Unknown command: ${command}\nUsage: md-viewer-server <start|stop|status|add-root|open|close|tabs|doctor> [options]`
     )
     process.exitCode = 1
   }
