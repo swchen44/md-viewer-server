@@ -18,7 +18,7 @@ function buildTestApp(overrides = {}) {
 
 describe('GET /api/health', () => {
   it('returns service info without requiring auth', async () => {
-    const { app } = buildTestApp()
+    const { app } = buildTestApp({ roots: [{ id: 0, path: '/tmp/a', name: 'a' }] })
     const res = await request(app).get('/api/health')
     expect(res.status).toBe(200)
     expect(res.body).toEqual({
@@ -27,6 +27,25 @@ describe('GET /api/health', () => {
       uptime: 42,
       roots: ['/tmp/a'],
     })
+  })
+
+  it('reports roots from the live shared `roots` array, not the startup-time config.roots snapshot', async () => {
+    // config.roots deliberately stays stale here (only '/tmp/a'), mirroring
+    // entry.js's config object which is captured once at startup and never
+    // updated. The shared `roots` array is what POST /api/roots pushes onto
+    // at runtime, so /api/health must read from it (by reference) to reflect
+    // a dynamically-added root without a daemon restart.
+    const liveRoots = [{ id: 0, path: '/tmp/a', name: 'a' }]
+    const { app } = buildTestApp({
+      config: { token: '1234', roots: ['/tmp/a'] },
+      roots: liveRoots,
+    })
+
+    // Mutate the shared array in place, the same way roots.js's POST handler does.
+    liveRoots.push({ id: 1, path: '/tmp/b', name: 'b' })
+
+    const res = await request(app).get('/api/health')
+    expect(res.body.roots).toEqual(['/tmp/a', '/tmp/b'])
   })
 })
 

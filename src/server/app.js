@@ -59,7 +59,12 @@ export function createApp({
       service: 'md-viewer-server',
       version: packageVersion,
       uptime: getUptimeSeconds(),
-      roots: config.roots,
+      // Read from the shared, live `roots` array (the same one POST
+      // /api/roots pushes onto and every other router reads by reference),
+      // NOT `config.roots` — that's a snapshot captured once at daemon
+      // startup and never updated, so a dynamically-added root would be
+      // invisible to `status` (which reads this endpoint) until a restart.
+      roots: roots.map((r) => r.path),
     })
   })
 
