@@ -26,7 +26,8 @@
   },
   "tabContent": {
     "loading": "불러오는 중...",
-    "loadError": "이 파일을 불러오지 못했습니다"
+    "loadError": "이 파일을 불러오지 못했습니다",
+    "tooLarge": "파일이 너무 커서 표시하거나 편집할 수 없습니다"
   },
   "plantumlView": {
     "disabledHint": "이 다이어그램을 렌더링하려면 설정에서 \"다이어그램 소스를 PlantUML 서버로 전송\"을 활성화하고 서버를 지정하세요.",

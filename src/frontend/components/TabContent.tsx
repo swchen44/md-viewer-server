@@ -30,6 +30,7 @@ export function TabContent({
 }: TabContentProps) {
   const { t } = useTranslation()
   const [loadError, setLoadError] = useState(false)
+  const [tooLarge, setTooLarge] = useState(false)
 
   // The tab can be swapped for a different file (different rootId/relPath)
   // while a previous tab's fetch failed and left loadError set — reset it
@@ -42,6 +43,7 @@ export function TabContent({
   if (prevTabKey !== tabKey) {
     setPrevTabKey(tabKey)
     setLoadError(false)
+    setTooLarge(false)
   }
 
   // Fetches once per tab, guarded by tab.content === null. The `cancelled`
@@ -54,7 +56,7 @@ export function TabContent({
   // carries no tab identifier: correctness here comes from the guard
   // suppressing stale deliveries, not from the parent disambiguating them.
   useEffect(() => {
-    if (tab.content !== null) return
+    if (tab.content !== null || tooLarge) return
     let cancelled = false
     apiFetch(`/api/file?root=${tab.rootId}&path=${encodeURIComponent(tab.relPath)}`)
       .then(async (res) => {
@@ -62,6 +64,13 @@ export function TabContent({
         if (cancelled) return
         if (!res.ok) {
           setLoadError(true)
+          return
+        }
+        // tooLarge responses carry content: null on purpose (the server
+        // never reads/serializes the full file) — that must not be handed
+        // to onContentLoaded as if it were real content.
+        if (data.tooLarge) {
+          setTooLarge(true)
           return
         }
         onContentLoaded(data.content, data.mtimeMs, data.encoding)
@@ -73,10 +82,17 @@ export function TabContent({
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab.rootId, tab.relPath, tab.content])
+  }, [tab.rootId, tab.relPath, tab.content, tooLarge])
 
   if (loadError) {
     return <div>{t('tabContent.loadError', 'Failed to load this file')}</div>
+  }
+
+  // Checked before the "still loading" state below: a tooLarge file's
+  // tab.content stays null forever (the server deliberately never sends
+  // it), so without this the tab would be stuck showing "Loading...".
+  if (tooLarge) {
+    return <div>{t('tabContent.tooLarge', 'This file is too large to render or edit.')}</div>
   }
 
   if (tab.content === null) {

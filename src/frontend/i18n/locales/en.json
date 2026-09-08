@@ -26,7 +26,8 @@
   },
   "tabContent": {
     "loading": "Loading...",
-    "loadError": "Failed to load this file"
+    "loadError": "Failed to load this file",
+    "tooLarge": "This file is too large to render or edit."
   },
   "plantumlView": {
     "disabledHint": "Enable \"Send diagram source to PlantUML server\" in Settings and specify a server to render this diagram.",

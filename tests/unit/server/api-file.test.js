@@ -155,4 +155,29 @@ describe('file CRUD API', () => {
     expect(res.status).toBe(400)
     expect(res.body.errorCode).toBe('UNSAFE_PATH')
   })
+
+  // >5MB files must not get a full render attempt (syntax-highlighted editor,
+  // diagram rendering, etc. could freeze the tab). The guard has to check
+  // size via fs.statSync BEFORE calling readFile — returning tooLarge:true
+  // only defeats its own purpose if the full content was already read off
+  // disk and serialized into the JSON response on the way there.
+  describe('GET /api/file size guard (>5MB)', () => {
+    const FIVE_MB = 5 * 1024 * 1024
+
+    it('returns tooLarge:true with content:null for a file over the 5MB threshold', async () => {
+      fs.writeFileSync(path.join(rootDir, 'big.md'), Buffer.alloc(FIVE_MB + 1, 'a'))
+      const res = await request(buildApp()).get('/api/file?root=0&path=big.md')
+      expect(res.status).toBe(200)
+      expect(res.body).toMatchObject({ content: null, tooLarge: true })
+      expect(typeof res.body.mtimeMs).toBe('number')
+    })
+
+    it('renders normally for a file at exactly the 5MB threshold (not over it)', async () => {
+      fs.writeFileSync(path.join(rootDir, 'exact.md'), Buffer.alloc(FIVE_MB, 'a'))
+      const res = await request(buildApp()).get('/api/file?root=0&path=exact.md')
+      expect(res.status).toBe(200)
+      expect(res.body.tooLarge).toBeFalsy()
+      expect(typeof res.body.content).toBe('string')
+    })
+  })
 })

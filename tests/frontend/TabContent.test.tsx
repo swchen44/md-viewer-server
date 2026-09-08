@@ -278,6 +278,31 @@ describe('TabContent', () => {
     expect(screen.getByText(en.tabContent.loading)).toBeInTheDocument()
   })
 
+  it('shows a too-large notice and renders neither MarkdownView nor MarkdownEditor when the server reports tooLarge', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ content: null, mtimeMs: 123, encoding: 'unknown', tooLarge: true }))
+      )
+    )
+    const onContentLoaded = vi.fn()
+    render(
+      <TabContent
+        tab={makeTab()}
+        onContentLoaded={onContentLoaded}
+        onChange={() => {}}
+        onSave={() => {}}
+        allowHtmlScripts={false}
+        blockRemoteContent={false}
+        sendToPlantUmlServer={false}
+      />
+    )
+    await waitFor(() => expect(screen.getByText(en.tabContent.tooLarge)).toBeInTheDocument())
+    expect(onContentLoaded).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('markdown-view')).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+  })
+
   it('shows an error state instead of crashing when GET /api/file returns a non-ok response', async () => {
     vi.stubGlobal(
       'fetch',

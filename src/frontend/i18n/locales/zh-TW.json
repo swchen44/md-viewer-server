@@ -26,7 +26,8 @@
   },
   "tabContent": {
     "loading": "載入中...",
-    "loadError": "這個檔案載入失敗"
+    "loadError": "這個檔案載入失敗",
+    "tooLarge": "檔案過大，不提供完整渲染"
   },
   "plantumlView": {
     "disabledHint": "請至設定開啟「傳送圖表原始碼至 PlantUML 伺服器」並指定 server，才能渲染此圖表。",
