@@ -154,6 +154,77 @@ describe('POST /api/roots', () => {
     expect(res.body.existingRootId).toBe(0)
     expect(daemonControl.addRootWatch).not.toHaveBeenCalled()
   })
+
+  it('a dynamically-added root is immediately visible in /api/health (what `status` reads), no restart needed', async () => {
+    const newRootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'api-roots-health-'))
+    try {
+      const postRes = await request(app)
+        .post('/api/roots')
+        .set('X-Auth-Token', token)
+        .send({ path: newRootDir })
+      expect(postRes.status).toBe(201)
+
+      const healthRes = await request(app).get('/api/health')
+      expect(healthRes.status).toBe(200)
+      expect(healthRes.body.roots).toContain(path.resolve(newRootDir))
+    } finally {
+      fs.rmSync(newRootDir, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects a new root added via a SYMLINK pointing directly at an existing root\'s directory', async () => {
+    const symlinkPath = path.join(os.tmpdir(), `api-roots-symlink-${Date.now()}`)
+    fs.symlinkSync(testRoot, symlinkPath)
+    try {
+      const res = await request(app)
+        .post('/api/roots')
+        .set('X-Auth-Token', token)
+        .send({ path: symlinkPath })
+
+      expect(res.status).toBe(409)
+      expect(res.body.errorCode).toBe('ROOT_OVERLAPS_EXISTING')
+      expect(res.body.existingRootId).toBe(0)
+      expect(daemonControl.addRootWatch).not.toHaveBeenCalled()
+    } finally {
+      fs.unlinkSync(symlinkPath)
+    }
+  })
+
+  it('rejects a new root added via a SYMLINK pointing at a SUBDIRECTORY of an existing root', async () => {
+    const subdir = path.join(testRoot, 'nested')
+    fs.mkdirSync(subdir, { recursive: true })
+    const symlinkPath = path.join(os.tmpdir(), `api-roots-symlink-sub-${Date.now()}`)
+    fs.symlinkSync(subdir, symlinkPath)
+    try {
+      const res = await request(app)
+        .post('/api/roots')
+        .set('X-Auth-Token', token)
+        .send({ path: symlinkPath })
+
+      expect(res.status).toBe(409)
+      expect(res.body.errorCode).toBe('ROOT_OVERLAPS_EXISTING')
+      expect(res.body.existingRootId).toBe(0)
+      expect(daemonControl.addRootWatch).not.toHaveBeenCalled()
+    } finally {
+      fs.unlinkSync(symlinkPath)
+    }
+  })
+
+  it('still accepts a genuinely distinct real directory that is not a symlink alias of anything (no false-positive regression)', async () => {
+    const distinctDir = fs.mkdtempSync(path.join(os.tmpdir(), 'api-roots-distinct-'))
+    try {
+      const res = await request(app)
+        .post('/api/roots')
+        .set('X-Auth-Token', token)
+        .send({ path: distinctDir })
+
+      expect(res.status).toBe(201)
+      expect(res.body).toEqual({ id: 1, name: path.basename(distinctDir) })
+      expect(daemonControl.addRootWatch).toHaveBeenCalled()
+    } finally {
+      fs.rmSync(distinctDir, { recursive: true, force: true })
+    }
+  })
 })
 
 describe('POST /api/roots — full daemon (watcher actually watches the new root)', () => {

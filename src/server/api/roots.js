@@ -1,4 +1,5 @@
 import express from 'express'
+import fs from 'node:fs'
 import path from 'node:path'
 import { validateRoots } from '../commands/start.js'
 import { appendRoot } from '../config.js'
@@ -13,10 +14,20 @@ function isNestedOrSame(a, b) {
   return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))
 }
 
+// A path.resolve()'d path can still be a symlink pointing at (or into) an
+// already-configured root's real directory; comparing the resolved strings
+// as-is would miss that and let a symlink alias bypass the overlap check
+// entirely. Canonicalize through realpath for the comparison ONLY — what
+// gets stored (via appendRoot and the in-memory roots array) stays whatever
+// resolvedPath already is, to avoid the macOS /var -> /private/var-style
+// symlink mismatch this codebase deliberately avoids elsewhere (see
+// validateRoots in commands/start.js).
 function overlapsExistingRoot(roots, candidatePath) {
-  return roots.find(
-    (root) => isNestedOrSame(root.path, candidatePath) || isNestedOrSame(candidatePath, root.path)
-  )
+  const candidateReal = fs.realpathSync(candidatePath)
+  return roots.find((root) => {
+    const rootReal = fs.realpathSync(root.path)
+    return isNestedOrSame(rootReal, candidateReal) || isNestedOrSame(candidateReal, rootReal)
+  })
 }
 
 export function createRootsRouter(roots, { configDir, daemonControl } = {}) {
