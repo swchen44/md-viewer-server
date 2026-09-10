@@ -40,7 +40,13 @@ export function useSettings() {
     }
   }, [])
 
+  // Guards settings reads and writes against out-of-order responses. A
+  // settings-changed event can trigger a reload while a local PUT is still in
+  // flight, so both operations share one issue-order sequence number.
+  const requestSeqRef = useRef(0)
+
   const reloadSettings = useCallback(async () => {
+    const seq = ++requestSeqRef.current
     try {
       const res = await apiFetch('/api/settings')
       if (!res.ok) {
@@ -62,12 +68,12 @@ export function useSettings() {
           // Non-JSON body — fall through with errorCode left undefined.
         }
         console.error('Failed to load /api/settings', res.status, errorCode)
-        if (!mountedRef.current) return
+        if (!mountedRef.current || seq !== requestSeqRef.current) return
         setError(errorCode ?? 'UNKNOWN_ERROR')
         return
       }
       const data = await res.json()
-      if (!mountedRef.current) return
+      if (!mountedRef.current || seq !== requestSeqRef.current) return
       setError(null)
       setSettings(data)
     } catch (err) {
@@ -75,13 +81,16 @@ export function useSettings() {
         // this the rejection is unhandled and `settings` stays null with no
         // error ever surfaced.
         console.error('Failed to load /api/settings', err)
-        if (!mountedRef.current) return
+        if (!mountedRef.current || seq !== requestSeqRef.current) return
         setError('UNKNOWN_ERROR')
     }
   }, [])
 
   useEffect(() => {
-    void reloadSettings()
+    // Defer the first call to the async loader so the effect itself only
+    // schedules external I/O; the state updates happen in its promise
+    // callbacks, after the effect has returned.
+    void Promise.resolve().then(reloadSettings)
   }, [reloadSettings])
 
   // Guards against two races on `updateSettings`:
@@ -92,8 +101,6 @@ export function useSettings() {
   //    order, so a stale response must not clobber a newer call's result.
   //    Same "ignore stale responses via an issue-order sequence number"
   //    idiom as App.tsx's `fileSearchSeqRef` guarding /api/search.
-  const requestSeqRef = useRef(0)
-
   const updateSettings = useCallback(async (patch: Partial<Settings>) => {
     const seq = ++requestSeqRef.current
     const res = await apiFetch('/api/settings', {
