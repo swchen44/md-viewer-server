@@ -6,7 +6,15 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 export default [
   js.configs.recommended,
   {
-    files: ['bin/**', 'src/server/**', 'scripts/**', 'tests/unit/**', 'tests/integration/**'],
+    files: [
+      'bin/**',
+      'src/server/**',
+      'scripts/**',
+      'tests/unit/**',
+      'tests/integration/**',
+      'tests/e2e/**',
+      'playwright.config.js',
+    ],
     languageOptions: {
       ecmaVersion: 2023,
       sourceType: 'module',
