@@ -51,17 +51,37 @@ function buildSearchTexts(
   headings: Heading[],
   sectionContents: string[],
   target: 'title' | 'content' | 'both'
-): string[] {
-  return headings.map((heading, index) => {
-    if (target === 'content') return sectionContents[index] ?? ''
-    if (target === 'both') return `${heading.text}\n${sectionContents[index] ?? ''}`
-    return heading.text
+): { texts: string[]; headingIndexes: number[] } {
+  const texts: string[] = []
+  const headingIndexes: number[] = []
+  headings.forEach((heading, index) => {
+    if (target !== 'content') {
+      texts.push(heading.text)
+      headingIndexes.push(index)
+    }
+    if (target !== 'title') {
+      const lines = (sectionContents[index] ?? '').split(/\r?\n/)
+      for (const line of lines) {
+        texts.push(line)
+        headingIndexes.push(index)
+      }
+    }
   })
+  return { texts, headingIndexes }
 }
 
-function applyPlainTextFilter(headings: Heading[], texts: string[], query: string): Heading[] {
+function applyPlainTextFilter(
+  headings: Heading[],
+  searchTexts: { texts: string[]; headingIndexes: number[] },
+  query: string
+): Heading[] {
   const needle = query.toLowerCase()
-  return headings.filter((_, index) => (texts[index] ?? '').toLowerCase().includes(needle))
+  const matches = new Set(
+    searchTexts.headingIndexes.filter((_, index) =>
+      (searchTexts.texts[index] ?? '').toLowerCase().includes(needle)
+    )
+  )
+  return headings.filter((_, index) => matches.has(index))
 }
 
 export function OutlinePanel({ activeTab, content, onJumpToHeading, headingFilter }: OutlinePanelProps) {
@@ -82,6 +102,7 @@ export function OutlinePanel({ activeTab, content, onJumpToHeading, headingFilte
     query: string
     target: 'title' | 'content' | 'both'
     headings: Heading[]
+    searchTexts: { texts: string[]; headingIndexes: number[] }
     matches: Heading[]
   } | null>(null)
   // Adjust state during render (React's documented pattern for resetting state when
@@ -149,16 +170,19 @@ export function OutlinePanel({ activeTab, content, onJumpToHeading, headingFilte
     const controller = new AbortController()
     runOutlineRegexMatch(
       query,
-      searchTexts,
+      searchTexts.texts,
       { signal: controller.signal }
     )
       .then((matchedIndexes) => {
         if (cancelled) return
-        const matched = new Set(matchedIndexes)
+        const matched = new Set(
+          matchedIndexes.map((index) => searchTexts.headingIndexes[index]).filter((index) => index !== undefined)
+        )
         setRegexMatchResult({
           query,
           target,
           headings,
+          searchTexts,
           matches: headings.filter((_, i) => matched.has(i)),
         })
       })
@@ -166,7 +190,7 @@ export function OutlinePanel({ activeTab, content, onJumpToHeading, headingFilte
         // Invalid pattern, worker error, cancellation, or a timed-out
         // pathological pattern — in every case, show no matches rather than
         // crash the panel or leave stale results on screen indefinitely.
-        if (!cancelled) setRegexMatchResult({ query, target, headings, matches: [] })
+        if (!cancelled) setRegexMatchResult({ query, target, headings, searchTexts, matches: [] })
       })
     return () => {
       cancelled = true
@@ -191,7 +215,8 @@ export function OutlinePanel({ activeTab, content, onJumpToHeading, headingFilte
       regexMatchResult &&
       regexMatchResult.query === headingFilter.query &&
       regexMatchResult.headings === headings &&
-      regexMatchResult.target === target
+      regexMatchResult.target === target &&
+      regexMatchResult.searchTexts === searchTexts
     return upToDate ? regexMatchResult.matches : headings
   })()
 

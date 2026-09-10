@@ -208,7 +208,7 @@ describe('OutlinePanel', () => {
     render(
       <OutlinePanel
         activeTab={{ rootId: 0, relPath: 'a.md' }}
-        content={'# Intro\nalpha\n## Details\nbeta'}
+        content={'# Intro\nalpha\n## Details\n\nbeta'}
         onJumpToHeading={() => {}}
         headingFilter={{ query: '^beta$', target: 'content', regex: true }}
       />
