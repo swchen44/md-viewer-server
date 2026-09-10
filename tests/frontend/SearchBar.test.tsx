@@ -51,7 +51,7 @@ describe('SearchBar', () => {
     expect(screen.getByText(/^name$/i)).toBeInTheDocument()
   })
 
-  it('outline mode omits scope and always searches by title in the debounced call', () => {
+  it('outline mode omits scope and searches by title by default in the debounced call', () => {
     vi.useFakeTimers()
     const onSearch = vi.fn()
     render(<SearchBar mode="outline" onSearch={onSearch} />)
@@ -60,11 +60,21 @@ describe('SearchBar', () => {
     expect(onSearch).toHaveBeenCalledWith('sec', { target: 'title', regex: false })
   })
 
-  it('outline mode does not offer Content/Both search targets (no content available client-side)', () => {
+  it('outline mode offers Title/Content/Both search targets', () => {
     render(<SearchBar mode="outline" onSearch={() => {}} />)
-    expect(screen.queryByText(/^content$/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/^both$/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/^content$/i)).toBeInTheDocument()
+    expect(screen.getByText(/^both$/i)).toBeInTheDocument()
     expect(screen.getByText(/title/i)).toBeInTheDocument()
+  })
+
+  it('outline mode sends the selected content target', () => {
+    vi.useFakeTimers()
+    const onSearch = vi.fn()
+    render(<SearchBar mode="outline" onSearch={onSearch} />)
+    fireEvent.click(screen.getByText(/^content$/i))
+    fireEvent.change(screen.getByPlaceholderText(/search/i), { target: { value: 'body' } })
+    vi.advanceTimersByTime(300)
+    expect(onSearch).toHaveBeenCalledWith('body', { target: 'content', regex: false })
   })
 
   it('files mode still offers Content/Both search targets', () => {

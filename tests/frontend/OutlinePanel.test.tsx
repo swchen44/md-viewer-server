@@ -144,6 +144,79 @@ describe('OutlinePanel', () => {
     expect(screen.queryByText('Details')).not.toBeInTheDocument()
   })
 
+  it('filters headings by matching direct section content', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            headings: [
+              { level: 1, text: 'Intro', line: 1 },
+              { level: 2, text: 'Details', line: 3 },
+            ],
+          })
+        )
+      )
+    )
+    render(
+      <OutlinePanel
+        activeTab={{ rootId: 0, relPath: 'a.md' }}
+        content={'# Intro\nintro body\n## Details\ndetail body'}
+        onJumpToHeading={() => {}}
+        headingFilter={{ query: 'detail body', target: 'content', regex: false }}
+      />
+    )
+    await waitFor(() => expect(screen.getByText('Details')).toBeInTheDocument())
+    expect(screen.queryByText('Intro')).not.toBeInTheDocument()
+  })
+
+  it('matches content and title when outline target is both', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            headings: [
+              { level: 1, text: 'Intro', line: 1 },
+              { level: 2, text: 'Details', line: 3 },
+            ],
+          })
+        )
+      )
+    )
+    render(
+      <OutlinePanel
+        activeTab={{ rootId: 0, relPath: 'a.md' }}
+        content={'# Intro\nintro body\n## Details\ndetail body'}
+        onJumpToHeading={() => {}}
+        headingFilter={{ query: 'intro', target: 'both', regex: false }}
+      />
+    )
+    await waitFor(() => expect(screen.getByText('Intro')).toBeInTheDocument())
+    expect(screen.queryByText('Details')).not.toBeInTheDocument()
+  })
+
+  it('matches section content with the regex worker', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({ headings: [{ level: 1, text: 'Intro', line: 1 }, { level: 2, text: 'Details', line: 3 }] })
+        )
+      )
+    )
+    render(
+      <OutlinePanel
+        activeTab={{ rootId: 0, relPath: 'a.md' }}
+        content={'# Intro\nalpha\n## Details\nbeta'}
+        onJumpToHeading={() => {}}
+        headingFilter={{ query: '^beta$', target: 'content', regex: true }}
+      />
+    )
+    await waitFor(() => expect(screen.queryByText('Intro')).not.toBeInTheDocument())
+    expect(screen.getByText('Details')).toBeInTheDocument()
+  })
+
   it('filters headings using a regex query', async () => {
     vi.stubGlobal(
       'fetch',

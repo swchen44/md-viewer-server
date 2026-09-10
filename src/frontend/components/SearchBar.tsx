@@ -5,13 +5,7 @@ import { useSearchHistory } from '../hooks/useSearchHistory.js'
 
 export type FilesSearchTarget = 'name' | 'content' | 'both'
 export type FilesSearchScope = 'all' | 'open'
-// A heading object only carries {level, text, line} — no document body text is
-// available client-side to match against — so outline search can only ever
-// honestly support a title match. 'content'/'both' are intentionally not
-// offered (see the target-button rendering below): showing them would present
-// non-functional UI, since outline mode's OutlinePanel has no content to
-// filter against without adding a new API call per keystroke.
-export type OutlineSearchTarget = 'title'
+export type OutlineSearchTarget = 'title' | 'content' | 'both'
 
 export interface FilesSearchOptions {
   target: FilesSearchTarget
@@ -276,16 +270,12 @@ export function SearchBar(props: SearchBarProps) {
         >
           {nameOrTitleLabel}
         </button>
-        {mode === 'files' && (
-          <>
-            <button aria-pressed={target === 'content'} onClick={() => setTarget('content')}>
-              {t('search.targetContent', 'Content')}
-            </button>
-            <button aria-pressed={target === 'both'} onClick={() => setTarget('both')}>
-              {t('search.targetBoth', 'Both')}
-            </button>
-          </>
-        )}
+        <button aria-pressed={target === 'content'} onClick={() => setTarget('content')}>
+          {t('search.targetContent', 'Content')}
+        </button>
+        <button aria-pressed={target === 'both'} onClick={() => setTarget('both')}>
+          {t('search.targetBoth', 'Both')}
+        </button>
       </div>
       {mode === 'files' && (
         <div>

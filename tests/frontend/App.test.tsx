@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react'
 import { App } from '../../src/frontend/App.js'
 
 function stubRootsFetch() {
@@ -445,6 +445,50 @@ describe('App search wiring', () => {
 
     await vi.waitFor(() => expect(screen.queryByText('Details')).not.toBeInTheDocument())
     expect(screen.getByText('Intro')).toBeInTheDocument()
+    expect(
+      (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.some(([url]) =>
+        String(url).includes('/api/search')
+      )
+    ).toBe(false)
+  })
+
+  it('outline-mode content search filters the active tab content without a search API', async () => {
+    vi.useFakeTimers()
+    stubRoutedFetch([
+      { match: '/api/roots', response: [{ id: 0, name: 'proj' }] },
+      { match: '/api/files', response: { files: [{ relPath: 'a.md', size: 1, mtimeMs: 1 }] } },
+      {
+        match: '/api/file?',
+        response: {
+          content: '# Intro\nintro body\n## Details\ndetail body',
+          mtimeMs: 1,
+          encoding: 'utf-8',
+        },
+      },
+      {
+        match: '/api/outline',
+        response: {
+          headings: [
+            { level: 1, text: 'Intro', line: 1 },
+            { level: 2, text: 'Details', line: 3 },
+          ],
+        },
+      },
+    ])
+    render(<App />)
+    await vi.waitFor(() => expect(screen.getByText('a.md')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('a.md'))
+    await vi.waitFor(() => expect(screen.getByRole('heading', { name: 'Intro' })).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: /outline/i }))
+    await vi.waitFor(() => expect(screen.getByText('Details')).toBeInTheDocument())
+    fireEvent.click(screen.getByText(/^content$/i))
+    fireEvent.change(screen.getByPlaceholderText(/search/i), { target: { value: 'detail body' } })
+    await vi.advanceTimersByTimeAsync(300)
+
+    const outlinePanel = within(screen.getByTestId('outline-panel'))
+    await vi.waitFor(() => expect(outlinePanel.getByText('Details')).toBeInTheDocument())
+    expect(outlinePanel.queryByText('Intro')).not.toBeInTheDocument()
     expect(
       (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.some(([url]) =>
         String(url).includes('/api/search')

@@ -807,9 +807,9 @@ export function App() {
   }
 
   function handleOutlineSearch(query: string, options: OutlineSearchOptions) {
-    // Outline search scope is always "the current tab's already-loaded headings" —
+    // Outline search scope is always "the current tab's already-loaded content" —
     // OutlinePanel filters client-side, so no API call is made here.
-    setOutlineSearchFilter(query.trim() ? { query, regex: options.regex } : null)
+    setOutlineSearchFilter(query.trim() ? { query, target: options.target, regex: options.regex } : null)
   }
 
   async function handleShowPath() {
@@ -904,6 +904,7 @@ export function App() {
               <SearchBar mode="outline" onSearch={handleOutlineSearch} />
               <OutlinePanel
                 activeTab={activeOutlineTab}
+                content={activeTab?.content}
                 onJumpToHeading={handleJumpToHeading}
                 headingFilter={outlineSearchFilter}
               />

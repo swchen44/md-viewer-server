@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../api-client.js'
 import { runOutlineRegexMatch } from '../outline-regex-client.js'
@@ -17,10 +17,12 @@ interface ActiveTabRef {
 export interface HeadingFilter {
   query: string
   regex: boolean
+  target?: 'title' | 'content' | 'both'
 }
 
 interface OutlinePanelProps {
   activeTab: ActiveTabRef | null
+  content?: string | null
   onJumpToHeading: (line: number) => void
   headingFilter?: HeadingFilter | null
 }
@@ -35,12 +37,34 @@ function sameTab(a: ActiveTabRef | null, b: ActiveTabRef | null): boolean {
 // for the active tab are already loaded in memory (fetched once per tab
 // below). Plain-text filtering is a simple case-insensitive substring scan —
 // no backtracking risk, so it stays synchronous here.
-function applyPlainTextFilter(headings: Heading[], query: string): Heading[] {
-  const needle = query.toLowerCase()
-  return headings.filter((h) => h.text.toLowerCase().includes(needle))
+function buildSectionContents(headings: Heading[], content: string | null | undefined): string[] {
+  if (content === null || content === undefined) return headings.map(() => '')
+  const lines = content.split(/\r?\n/)
+  return headings.map((heading, index) => {
+    const start = Math.max(heading.line, 1)
+    const nextHeadingLine = headings[index + 1]?.line ?? lines.length + 1
+    return lines.slice(start, Math.max(start, nextHeadingLine - 1)).join('\n')
+  })
 }
 
-export function OutlinePanel({ activeTab, onJumpToHeading, headingFilter }: OutlinePanelProps) {
+function buildSearchTexts(
+  headings: Heading[],
+  sectionContents: string[],
+  target: 'title' | 'content' | 'both'
+): string[] {
+  return headings.map((heading, index) => {
+    if (target === 'content') return sectionContents[index] ?? ''
+    if (target === 'both') return `${heading.text}\n${sectionContents[index] ?? ''}`
+    return heading.text
+  })
+}
+
+function applyPlainTextFilter(headings: Heading[], texts: string[], query: string): Heading[] {
+  const needle = query.toLowerCase()
+  return headings.filter((_, index) => (texts[index] ?? '').toLowerCase().includes(needle))
+}
+
+export function OutlinePanel({ activeTab, content, onJumpToHeading, headingFilter }: OutlinePanelProps) {
   const { t } = useTranslation()
   const [headings, setHeadings] = useState<Heading[]>([])
   const [loadError, setLoadError] = useState(false)
@@ -56,6 +80,7 @@ export function OutlinePanel({ activeTab, onJumpToHeading, headingFilter }: Outl
   // from inside the async .then()/.catch() callbacks once a match completes.
   const [regexMatchResult, setRegexMatchResult] = useState<{
     query: string
+    target: 'title' | 'content' | 'both'
     headings: Heading[]
     matches: Heading[]
   } | null>(null)
@@ -70,6 +95,13 @@ export function OutlinePanel({ activeTab, onJumpToHeading, headingFilter }: Outl
     setHeadings([])
     setLoadError(false)
   }
+
+  const sectionContents = useMemo(() => buildSectionContents(headings, content), [headings, content])
+  const target = headingFilter?.target ?? 'title'
+  const searchTexts = useMemo(
+    () => buildSearchTexts(headings, sectionContents, target),
+    [headings, sectionContents, target]
+  )
 
   useEffect(() => {
     if (!activeTab) return
@@ -117,25 +149,30 @@ export function OutlinePanel({ activeTab, onJumpToHeading, headingFilter }: Outl
     const controller = new AbortController()
     runOutlineRegexMatch(
       query,
-      headings.map((h) => h.text),
+      searchTexts,
       { signal: controller.signal }
     )
       .then((matchedIndexes) => {
         if (cancelled) return
         const matched = new Set(matchedIndexes)
-        setRegexMatchResult({ query, headings, matches: headings.filter((_, i) => matched.has(i)) })
+        setRegexMatchResult({
+          query,
+          target,
+          headings,
+          matches: headings.filter((_, i) => matched.has(i)),
+        })
       })
       .catch(() => {
         // Invalid pattern, worker error, cancellation, or a timed-out
         // pathological pattern — in every case, show no matches rather than
         // crash the panel or leave stale results on screen indefinitely.
-        if (!cancelled) setRegexMatchResult({ query, headings, matches: [] })
+        if (!cancelled) setRegexMatchResult({ query, target, headings, matches: [] })
       })
     return () => {
       cancelled = true
       controller.abort()
     }
-  }, [headingFilter, headings])
+  }, [headingFilter, headings, searchTexts, target])
 
   if (!activeTab) {
     return <div data-testid="outline-panel">{t('outline.noFileOpen', 'No file open')}</div>
@@ -149,11 +186,12 @@ export function OutlinePanel({ activeTab, onJumpToHeading, headingFilter }: Outl
 
   const visibleHeadings = (() => {
     if (!headingFilter || !headingFilter.query) return headings
-    if (!headingFilter.regex) return applyPlainTextFilter(headings, headingFilter.query)
+    if (!headingFilter.regex) return applyPlainTextFilter(headings, searchTexts, headingFilter.query)
     const upToDate =
       regexMatchResult &&
       regexMatchResult.query === headingFilter.query &&
-      regexMatchResult.headings === headings
+      regexMatchResult.headings === headings &&
+      regexMatchResult.target === target
     return upToDate ? regexMatchResult.matches : headings
   })()
 
