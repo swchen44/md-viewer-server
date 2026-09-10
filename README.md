@@ -2,28 +2,82 @@
 
 [繁體中文](README.zh-TW.md)
 
-> **Status: design phase.** The design spec is finalized; implementation hasn't started yet. This README describes the planned feature set — check back for install instructions once a release is published, or watch [the design spec](docs/superpowers/specs/2026-09-05-md-viewer-server-design.md) for the source of truth.
+> **Status: early implementation (0.1.0).** The daemon and browser UI are implemented and can be run from this repository. npm and offline release artifacts are not published yet, so the source checkout quick start below is the current installation path.
 
-A background daemon that runs on Linux and serves a browser UI for viewing, searching, and editing Markdown/HTML files over your LAN — built for the workflow where you SSH into a Linux box, have an AI agent write Markdown/HTML there, and want to see the rendered result immediately from a Windows Chrome browser instead of round-tripping files back to your desktop.
+A background daemon that serves a browser UI for viewing, searching, and editing Markdown/HTML files over your LAN. It is intended for the workflow where you SSH into a Linux machine, have an AI agent write Markdown/HTML there, and want to see the rendered result immediately from another browser.
 
-## Features (planned)
+## Features
 
-- **CLI daemon**: `start` / `stop` / `status` / `doctor`, no root required, works fully offline (no `npm install` needed on the target machine — ships as a self-contained bundle)
-- **Live reload**: file changes on disk (from your AI agent, an editor, anything) push to every connected browser over WebSocket
-- **View, search, edit**: multi-tab interface (view / edit / split), full-text and filename search with regex support, an outline panel for jumping to headings
-- **Multi-root support**: point the daemon at several folders at once
-- **Safety by design**: `.html` files render inside a sandboxed iframe (can't read your session token even if you allow script execution), path-traversal-safe file addressing, optimistic-lock conflict detection when a file changes underneath an open edit
-- **Customizable**: light/dark themes, accent colors, custom CSS presets (editable, extensible), 5 UI languages (en / zh-TW / zh-CN / ja / ko)
-- **Privacy mode**: one switch to block remote images/media and disable PlantUML/script execution
+- **CLI daemon**: `start`, `stop`, `status`, `doctor`, `add-root`, `open`, `close`, and `tabs`
+- **Live reload**: file changes are broadcast to connected browsers over WebSocket
+- **View, search, edit**: view/edit/split modes for text documents, filename/content/both search, regex search, open-tab search, and an outline panel with title/content/both filtering
+- **Markdown and diagrams**: Markdown extensions, GFM, Mermaid code blocks, `.mmd`, `.puml`, and `.plantuml`
+- **Multi-root support**: configure roots at startup and add another root while the daemon is running
+- **Conflict protection**: optimistic-lock checks prevent an edit from silently overwriting a newer file; optional `.bak` backups are available
+- **Safety controls**: path traversal checks, sandboxed HTML rendering, privacy mode, and server-side PlantUML permission enforcement
+- **Customizable UI**: light/dark/system themes, accent color, editor settings, custom CSS slots, and five UI languages (`en`, `zh-TW`, `zh-CN`, `ja`, `ko`)
 
-## Installation
+## Requirements
 
-Two install paths are planned:
+- Node.js `>=18.0.0` (`.nvmrc` and CI use Node 20)
+- A readable directory to serve
+- A browser on the same network when connecting from another machine
 
-- **Offline / air-gapped**: download `md-viewer-server-<version>.tar.gz` from [Releases](../../releases), extract anywhere in your home directory (no root needed), run `./md-viewer-server start --root <path>`
-- **With network access**: `npx md-viewer-server start --root <path>`
+## Quick start from source
 
-Full CLI reference and API docs: see [Developer Guide](docs/DEVELOPER.md).
+```bash
+git clone <repository-url>
+cd md-viewer-server
+npm ci
+npm run build
+node bin/cli.js start --root /path/to/your/markdown
+```
+
+`start` prints one or more browser URLs containing the authentication token. Open the URL for the machine you are using. The default port is `4173`; omit `--root` to serve the command's current working directory.
+
+The daemon binds to `0.0.0.0` so other devices on the LAN can connect. The token in the printed URL grants access to the configured roots. Treat the URL as a secret and do not paste it into public logs or issue reports. The daemon does not provide HTTPS; use it on a trusted network or put it behind an appropriate TLS reverse proxy.
+
+## CLI reference
+
+```text
+md-viewer-server start [--root <path> ...] [--port <port>] [--debug] [--rotate-token]
+md-viewer-server stop
+md-viewer-server status
+md-viewer-server doctor
+md-viewer-server add-root <path>
+md-viewer-server open <path>
+md-viewer-server close <path>
+md-viewer-server tabs
+```
+
+- `start` skips roots that do not exist or are not readable and reports them. If no valid root remains, it aborts.
+- `--debug` is accepted as a reserved flag, but it does not change daemon runtime logging yet.
+- `add-root` requires a running daemon, persists the new root, and starts watching it immediately.
+- `open` never adds a root implicitly. If the path is outside configured roots, run `add-root <folder>` first.
+- `close` accepts a full path or a filename. If a filename matches more than one open tab, retry with a full path.
+- `--rotate-token` generates a new token and restarts the daemon when needed. Existing browser sessions using the old token must reconnect with the new URL.
+
+## Privacy and file limits
+
+- Privacy mode forces remote content blocking, PlantUML sending off, and HTML scripts off, including for direct API calls.
+- PlantUML sending is disabled by default. Enabling it sends diagram source to the configured PlantUML server.
+- `.html` files are rendered in a sandboxed iframe. Script execution is off by default.
+- Files larger than 5 MiB are not fully read, rendered, or edited.
+- Files detected as non-UTF-8 are view-only.
+- This is not a multi-user collaborative editor. File edits use conflict detection rather than CRDT/OT.
+
+## Configuration and logs
+
+The daemon follows XDG directories:
+
+- Config: `$XDG_CONFIG_HOME/md-viewer-server/config.json`, or `~/.config/md-viewer-server/config.json`
+- State: `$XDG_STATE_HOME/md-viewer-server/server.pid` and `server.log`, or `~/.local/state/md-viewer-server/`
+
+Run `md-viewer-server doctor` when startup, permissions, port, or watcher checks need diagnosis.
+
+## Release status
+
+`npm run build` creates `dist/frontend/`, `dist/bundle.js`, and `dist/regex-worker.js`. A self-contained offline tarball and the published `npx md-viewer-server` flow are planned release artifacts, not current installation methods. Do not document a release URL or use `npx` until that package/version has been published.
 
 ## Reporting issues
 
@@ -32,6 +86,5 @@ Please use the issue template (bug report) and include:
 - Steps to reproduce
 - What you expected to happen
 - What actually happened
-- Your environment: OS, Node.js version, browser + version
-
-Vague reports without repro steps are hard to act on — the template will prompt you for these fields.
+- Your environment: server OS, Node.js version, browser + version, and release tag or commit
+- Relevant output from `md-viewer-server doctor` and `server.log` when applicable

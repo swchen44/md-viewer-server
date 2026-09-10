@@ -50,9 +50,8 @@ body:
     id: app-version
     attributes:
       label: md-viewer-server 版本 / md-viewer-server version
-      placeholder: "md-viewer-server --version 的輸出"
-    validations:
-      required: true
+      description: 若從 release 安裝，填 release tag；從 source 執行，填 commit SHA / Use the release tag, or the commit SHA when running from source
+      placeholder: "e.g. 0.1.0 or abc1234"
   - type: textarea
     id: logs
     attributes:

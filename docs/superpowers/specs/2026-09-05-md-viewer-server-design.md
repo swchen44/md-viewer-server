@@ -1,5 +1,7 @@
 # MD Viewer Server — 設計規格
 
+> **Historical design record.** The implementation has moved beyond this document. For current commands, API behavior, security boundaries, and test commands, use [README](../../../README.md) and [Developer Guide](../../../docs/DEVELOPER.md). Some items below remain planned or intentionally differ from the current implementation.
+
 日期：2026-09-05
 
 ## 背景與動機
