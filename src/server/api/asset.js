@@ -2,6 +2,7 @@ import express from 'express'
 import fs from 'node:fs'
 import path from 'node:path'
 import { resolveSafePath, PathSafetyError } from '../path-safety.js'
+import { findRoot } from '../root-params.js'
 
 const MIME_TYPES = {
   '.png': 'image/png',
@@ -17,10 +18,6 @@ const MIME_TYPES = {
 }
 
 const TEXT_LIKE = new Set(['.txt', '.md', '.svg'])
-
-function findRoot(roots, rootId) {
-  return roots.find((r) => r.id === Number(rootId))
-}
 
 export function createAssetRouter(roots) {
   const router = express.Router()

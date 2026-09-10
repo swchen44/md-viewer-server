@@ -1,10 +1,7 @@
 import express from 'express'
 import fs from 'node:fs'
 import { resolveSafePath, PathSafetyError } from '../path-safety.js'
-
-function findRoot(roots, rootId) {
-  return roots.find((r) => r.id === Number(rootId))
-}
+import { findRoot } from '../root-params.js'
 
 export function createRenameMkdirRouter(roots) {
   const router = express.Router()

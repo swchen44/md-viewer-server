@@ -1,9 +1,6 @@
 import express from 'express'
 import { resolveSafePath, PathSafetyError } from '../path-safety.js'
-
-function findRoot(roots, rootId) {
-  return roots.find((r) => r.id === Number(rootId))
-}
+import { findRoot } from '../root-params.js'
 
 export function createFilePathRouter(roots) {
   const router = express.Router()

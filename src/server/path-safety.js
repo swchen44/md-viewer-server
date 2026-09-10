@@ -10,6 +10,10 @@ export class PathSafetyError extends Error {
 }
 
 export function resolveSafePath(rootDir, relPath) {
+  if (typeof relPath !== 'string' || relPath.length === 0) {
+    throw new PathSafetyError('Path must be a non-empty relative path')
+  }
+
   const rootReal = fs.realpathSync(rootDir)
   const candidate = path.resolve(rootDir, relPath)
 

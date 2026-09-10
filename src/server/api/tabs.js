@@ -1,9 +1,6 @@
 import express from 'express'
 import { resolveSafePath, PathSafetyError } from '../path-safety.js'
-
-function findRoot(roots, rootId) {
-  return roots.find((r) => r.id === Number(rootId))
-}
+import { findRoot, parseRootId } from '../root-params.js'
 
 export function createTabsRouter(roots, registry, daemonControl) {
   const router = express.Router()
@@ -38,10 +35,14 @@ export function createTabsRouter(roots, registry, daemonControl) {
 
   router.delete('/tabs', (req, res) => {
     const { root, path: relPath } = req.body
+    const rootId = parseRootId(root)
+    if (rootId === null) return res.status(400).json({ errorCode: 'INVALID_ROOT_ID' })
+    if (typeof relPath !== 'string' || relPath.length === 0) {
+      return res.status(400).json({ errorCode: 'UNSAFE_PATH' })
+    }
     // No ROOT_NOT_FOUND check here on purpose: close is idempotent, so
     // closing a tab under an unknown/no-longer-existing root must still
     // succeed as a harmless no-op rather than error out.
-    const rootId = Number(root)
     registry.close(rootId, relPath)
     daemonControl.broadcast({ type: 'tab-closed', rootId, relPath })
     res.status(200).json({})

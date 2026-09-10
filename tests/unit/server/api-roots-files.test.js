@@ -47,4 +47,10 @@ describe('roots and files API', () => {
     expect(res.status).toBe(404)
     expect(res.body).toEqual({ errorCode: 'ROOT_NOT_FOUND' })
   })
+
+  it('GET /api/files?root= (empty root) does not select root zero', async () => {
+    const res = await request(buildApp()).get('/api/files?root=')
+    expect(res.status).toBe(404)
+    expect(res.body).toEqual({ errorCode: 'ROOT_NOT_FOUND' })
+  })
 })

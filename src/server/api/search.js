@@ -9,10 +9,7 @@ import {
   InvalidRegexError,
 } from '../search.js'
 import { RegexTimeoutError } from '../regex-timeout.js'
-
-function findRoot(roots, rootId) {
-  return roots.find((r) => r.id === Number(rootId))
-}
+import { findRoot } from '../root-params.js'
 
 // Normalizes the `openPaths` query param to a flat array of path strings no
 // matter which shape the configured query parser produced it in.

@@ -156,6 +156,12 @@ describe('file CRUD API', () => {
     expect(res.body.errorCode).toBe('UNSAFE_PATH')
   })
 
+  it('returns 400 for a missing path instead of throwing a TypeError', async () => {
+    const res = await request(buildApp()).get('/api/file?root=0')
+    expect(res.status).toBe(400)
+    expect(res.body.errorCode).toBe('UNSAFE_PATH')
+  })
+
   // >5MB files must not get a full render attempt (syntax-highlighted editor,
   // diagram rendering, etc. could freeze the tab). The guard has to check
   // size via fs.statSync BEFORE calling readFile — returning tooLarge:true

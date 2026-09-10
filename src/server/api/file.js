@@ -3,10 +3,7 @@ import fs from 'node:fs'
 import { readFile, writeFile, ConflictError } from '../file-store.js'
 import { resolveSafePath, PathSafetyError } from '../path-safety.js'
 import { readSettings } from '../settings.js'
-
-function findRoot(roots, rootId) {
-  return roots.find((r) => r.id === Number(rootId))
-}
+import { findRoot } from '../root-params.js'
 
 // Opening a file this large and attempting a full render (syntax-highlighted
 // editor, diagram rendering, etc.) risks freezing the tab. The threshold is
