@@ -36,11 +36,11 @@
 - `findRoot(roots, value) -> root | null`: uses strict parsing and never treats empty strings, arrays, or objects as root `0`.
 - `requireRelativePath(value) -> string`: rejects missing, non-string, empty, absolute, and traversal-shaped values with a structured path-parameter error handled by each router.
 
-- [ ] Write unit tests proving malformed root values do not select root 0 and missing paths produce a controlled error.
-- [ ] Run the focused tests and observe the expected failures against current route-local helpers.
-- [ ] Implement the shared parsing/validation helpers and update all six routers.
-- [ ] Run focused API tests, then all unit and integration tests.
-- [ ] Commit the hardening as one logical change.
+- [x] Write unit tests proving malformed root values do not select root 0 and missing paths produce a controlled error.
+- [x] Run the focused tests and observe the expected failures against current route-local helpers.
+- [x] Implement the shared parsing/validation helpers and update all six routers.
+- [x] Run focused API tests, then all unit and integration tests.
+- [x] Commit the hardening as one logical change.
 
 ### Task 2: Broadcast settings changes to connected browsers
 
@@ -60,12 +60,12 @@
 - `useFileWatcher` accepts `onSettingsChanged?: () => void` and dispatches the new event type.
 - `useSettings` exposes a stable `reloadSettings(): Promise<void>` that replaces the current settings with the daemon response.
 
-- [ ] Add failing server and frontend tests for the event and refresh behavior.
-- [ ] Run the focused tests and verify they fail because no event/handler exists.
-- [ ] Add the daemonControl wiring and settings event dispatch.
-- [ ] Add the hook reload method and connect App's event handler without opening another socket.
-- [ ] Run frontend, unit, and integration tests.
-- [ ] Commit the settings synchronization change.
+- [x] Add failing server and frontend tests for the event and refresh behavior.
+- [x] Run the focused tests and verify they fail because no event/handler exists.
+- [x] Add the daemonControl wiring and settings event dispatch.
+- [x] Add the hook reload method and connect App's event handler without opening another socket.
+- [x] Run frontend, unit, and integration tests.
+- [x] Commit the settings synchronization change.
 
 ### Task 3: Search outline headings, content, or both
 
@@ -82,17 +82,17 @@
 - `OutlineSearchOptions` carries `{target, regex}`.
 - `OutlinePanel` receives the active tab content and applies case-insensitive substring or Worker-backed regex matching to headings and/or source lines, returning heading line numbers for navigation.
 
-- [ ] Add failing component tests proving outline mode renders three target choices and content/both produce matching results.
-- [ ] Run the focused frontend tests and verify the failures are due to the missing controls/logic.
-- [ ] Implement target selection and local content matching, retaining current regex Worker safeguards.
-- [ ] Run all frontend tests and typecheck.
-- [ ] Perform a real browser check of outline title/content/both behavior and stop for UI checkpoint acceptance.
-- [ ] Commit the UI change with `[UI CHECKPOINT]` in the message.
+- [x] Add failing component tests proving outline mode renders three target choices and content/both produce matching results.
+- [x] Run the focused frontend tests and verify the failures are due to the missing controls/logic.
+- [x] Implement target selection and local content matching, retaining current regex Worker safeguards.
+- [x] Run all frontend tests and typecheck.
+- [x] Perform a real browser check of outline title/content/both behavior and stop for UI checkpoint acceptance.
+- [x] Commit the UI change with `[UI CHECKPOINT]` in the message.
 
 ## Definition of Done
 
-- [ ] Malformed root/path parameters return structured 400 responses and never throw uncaught TypeErrors.
-- [ ] All connected browser clients refresh settings after a successful settings update.
-- [ ] Outline mode supports title, content, and both searches in plain text and regex modes.
-- [ ] `npm run lint`, `npm run typecheck:frontend`, `npm run test:frontend`, `npm run test:unit`, `npm run test:integration`, and `npm run build` pass.
-- [ ] The UI checkpoint has been manually verified in a browser.
+- [x] Malformed root/path parameters return structured 400 responses and never throw uncaught TypeErrors.
+- [x] All connected browser clients refresh settings after a successful settings update.
+- [x] Outline mode supports title, content, and both searches in plain text and regex modes.
+- [x] `npm run lint`, `npm run typecheck:frontend`, `npm run test:frontend`, `npm run test:unit`, `npm run test:integration`, and `npm run build` pass.
+- [x] The UI checkpoint has been manually verified in a browser.
