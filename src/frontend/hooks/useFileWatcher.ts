@@ -7,20 +7,24 @@ import { getStoredToken } from '../auth.js'
 // complexity is YAGNI here (see task brief).
 const RECONNECT_DELAY_MS = 3000
 
-// Every event the daemon broadcasts carries a type and the root it concerns;
-// the payload beyond that differs per event (a path for the file/tab events,
-// a display name for root-added — see src/server/api/roots.js), so validation
-// is split into a shared base check plus a per-shape refinement below.
+// Every event the daemon broadcasts carries a type. Root-scoped events also
+// carry the root they concern; the payload beyond that differs per event (a
+// path for file/tab events, a display name for root-added — see
+// src/server/api/roots.js), so validation is split into a shared base check
+// plus a per-shape refinement below.
 interface BaseEvent {
   type: string
+}
+
+interface RootEvent extends BaseEvent {
   rootId: number
 }
 
-interface PathEvent extends BaseEvent {
+interface PathEvent extends RootEvent {
   relPath: string
 }
 
-interface RootAddedEvent extends BaseEvent {
+interface RootAddedEvent extends RootEvent {
   name: string
 }
 
@@ -28,16 +32,19 @@ function isBaseEvent(value: unknown): value is BaseEvent {
   return (
     typeof value === 'object' &&
     value !== null &&
-    typeof (value as BaseEvent).type === 'string' &&
-    typeof (value as BaseEvent).rootId === 'number'
+    typeof (value as BaseEvent).type === 'string'
   )
 }
 
-function isPathEvent(value: BaseEvent): value is PathEvent {
+function isRootEvent(value: BaseEvent): value is RootEvent {
+  return typeof (value as RootEvent).rootId === 'number'
+}
+
+function isPathEvent(value: RootEvent): value is PathEvent {
   return typeof (value as PathEvent).relPath === 'string'
 }
 
-function isRootAddedEvent(value: BaseEvent): value is RootAddedEvent {
+function isRootAddedEvent(value: RootEvent): value is RootAddedEvent {
   return typeof (value as RootAddedEvent).name === 'string'
 }
 
@@ -48,6 +55,7 @@ export interface FileWatcherHandlers {
   onTabOpened?: (rootId: number, relPath: string) => void
   onTabClosed?: (rootId: number, relPath: string) => void
   onRootAdded?: (rootId: number, name: string) => void
+  onSettingsChanged?: () => void
 }
 
 /**
@@ -106,6 +114,11 @@ export function useFileWatcher(handlers: FileWatcherHandlers): void {
         }
         if (!isBaseEvent(data)) return
         const h = handlersRef.current
+        if (data.type === 'settings-changed') {
+          h.onSettingsChanged?.()
+          return
+        }
+        if (!isRootEvent(data)) return
         switch (data.type) {
           case 'file-changed':
             if (isPathEvent(data)) h.onFileChanged?.(data.rootId, data.relPath)

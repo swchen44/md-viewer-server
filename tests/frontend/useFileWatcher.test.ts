@@ -82,6 +82,13 @@ describe('useFileWatcher', () => {
     expect(onRootAdded).toHaveBeenCalledWith(3, 'docs')
   })
 
+  it('dispatches a settings-changed event to onSettingsChanged', () => {
+    const onSettingsChanged = vi.fn()
+    renderHook(() => useFileWatcher({ onSettingsChanged }))
+    MockWebSocket.instances[0].emit({ type: 'settings-changed' })
+    expect(onSettingsChanged).toHaveBeenCalledTimes(1)
+  })
+
   it('ignores a root-added event with no name, and a tab-opened event with no relPath', () => {
     const onRootAdded = vi.fn()
     const onTabOpened = vi.fn()

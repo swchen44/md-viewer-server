@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import express from 'express'
 import request from 'supertest'
 import http from 'node:http'
@@ -14,9 +14,11 @@ describe('settings and PlantUML proxy API', () => {
   let fakeUpstream
   let fakeUpstreamPort
   let upstreamContentType
+  let daemonControl
 
   beforeEach(async () => {
     configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'api-plantuml-'))
+    daemonControl = { broadcast: vi.fn() }
     loadOrCreateConfig(configDir, { roots: ['/tmp/a'], port: 4173 })
     upstreamContentType = 'image/png'
 
@@ -43,7 +45,7 @@ describe('settings and PlantUML proxy API', () => {
   function buildApp() {
     const app = express()
     app.use(express.json())
-    app.use('/api', createSettingsRouter(configDir))
+    app.use('/api', createSettingsRouter(configDir, daemonControl))
     app.use('/api', createPlantUmlRouter(configDir))
     return app
   }
@@ -64,6 +66,14 @@ describe('settings and PlantUML proxy API', () => {
 
     const getRes = await request(app).get('/api/settings')
     expect(getRes.body.plantumlServerUrl).toBe(`http://127.0.0.1:${fakeUpstreamPort}`)
+  })
+
+  it('broadcasts settings-changed after a successful PUT', async () => {
+    const app = buildApp()
+    const res = await request(app).put('/api/settings').send({ privacyMode: true })
+
+    expect(res.status).toBe(200)
+    expect(daemonControl.broadcast).toHaveBeenCalledWith({ type: 'settings-changed' })
   })
 
   it('POST /api/plantuml-proxy encodes the source and proxies to the configured server', async () => {

@@ -76,7 +76,7 @@ export function createApp({
   app.use('/api', authMiddleware, createRenameMkdirRouter(roots))
   app.use('/api', authMiddleware, createAssetRouter(roots))
   app.use('/api', authMiddleware, createSearchRouter(roots, extensions))
-  app.use('/api', authMiddleware, createSettingsRouter(configDir))
+  app.use('/api', authMiddleware, createSettingsRouter(configDir, daemonControl))
   app.use('/api', authMiddleware, createPlantUmlRouter(configDir))
   app.use('/api', authMiddleware, createVersionCheckRouter(configDir, packageVersion))
   app.use('/api', authMiddleware, createTabsRouter(roots, openTabsRegistry, daemonControl))

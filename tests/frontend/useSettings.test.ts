@@ -123,6 +123,26 @@ describe('useSettings', () => {
     expect(JSON.parse(putCall[1].body)).toEqual({ privacyMode: true })
   })
 
+  it('reloadSettings replaces local state with the daemon response', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(settingsResponse())))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(settingsResponse({ privacyMode: true })))
+      )
+    vi.stubGlobal('fetch', fetchMock)
+    const { result } = renderHook(() => useSettings())
+    await waitFor(() => expect(result.current.settings).not.toBeNull())
+
+    await act(async () => {
+      await result.current.reloadSettings()
+    })
+
+    expect(result.current.settings?.privacyMode).toBe(true)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/settings')
+  })
+
   it('surfaces an error message when updateSettings fails (e.g. 400 invalid settings)', async () => {
     const fetchMock = vi
       .fn()

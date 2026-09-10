@@ -1,7 +1,7 @@
 import express from 'express'
 import { InvalidSettingsError, readSettings, updateSettings } from '../settings.js'
 
-export function createSettingsRouter(configDir) {
+export function createSettingsRouter(configDir, daemonControl = { broadcast: () => {} }) {
   const router = express.Router()
 
   router.get('/settings', (req, res) => {
@@ -21,6 +21,7 @@ export function createSettingsRouter(configDir) {
       }
       throw err
     }
+    daemonControl.broadcast({ type: 'settings-changed' })
     res.set('Content-Type', 'application/json; charset=utf-8')
     res.json(updated)
   })

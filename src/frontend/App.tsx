@@ -88,7 +88,7 @@ export function App() {
   // Tab itself (kept as separate App-level state) since it's ephemeral UI
   // state, not something that needs to round-trip through useDraft/tabs.
   const [externallyModifiedTabIds, setExternallyModifiedTabIds] = useState<Set<string>>(new Set())
-  const { settings, updateSettings } = useSettings()
+  const { settings, updateSettings, reloadSettings } = useSettings()
   const { prefs, setPref } = useLocalPrefs()
   // The effective CSS content is derived straight from backend-persisted
   // `settings` (customCssChoice/customCssUser1/customCssUser2) rather than a
@@ -735,6 +735,7 @@ export function App() {
     onTabOpened: handleTabOpened,
     onTabClosed: handleTabClosed,
     onRootAdded: handleRootAdded,
+    onSettingsChanged: reloadSettings,
   })
 
   async function handleFileSearch(query: string, options: FilesSearchOptions) {
