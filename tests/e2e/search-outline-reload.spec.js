@@ -70,6 +70,7 @@ test('matches an outline content regex against the source line', async ({ page }
   await query.fill('^install dependencies')
   await query.press('Enter')
 
+  await expect(outline).not.toContainText('E2E Fixture Heading')
   await expect(outline).toContainText('Setup')
 })
 
