@@ -21,7 +21,7 @@ export default defineConfig({
     video: 'retain-on-failure',
   },
   webServer: {
-    command: `node scripts/e2e-server.js --port ${port}`,
+    command: `npm run build && node scripts/e2e-server.js --port ${port}`,
     url: `${baseURL}/api/health`,
     timeout: 120_000,
     reuseExistingServer: false,

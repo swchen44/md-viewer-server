@@ -17,15 +17,17 @@ const seedFiles = {
 
 function parsePort(argv) {
   const portFlagIndex = argv.indexOf('--port')
-  const value = argv[portFlagIndex + 1]
-  const port = Number(value)
+  if (portFlagIndex === -1) {
+    throw new Error('Expected --port followed by a numeric value between 1 and 65535.')
+  }
 
-  if (
-    portFlagIndex === -1 ||
-    !Number.isInteger(port) ||
-    port < 1 ||
-    port > 65_535
-  ) {
+  const value = argv[portFlagIndex + 1]
+  if (!/^\d+$/.test(value ?? '')) {
+    throw new Error('Expected a numeric --port value between 1 and 65535.')
+  }
+
+  const port = Number(value)
+  if (port < 1 || port > 65_535) {
     throw new Error('Expected a numeric --port value between 1 and 65535.')
   }
 
