@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
-import { OutlinePanel } from '../../src/frontend/components/OutlinePanel.js'
+import { OutlinePanel, type HeadingFilter } from '../../src/frontend/components/OutlinePanel.js'
 
 describe('OutlinePanel', () => {
   beforeEach(() => sessionStorage.setItem('mvs-token', 'tok'))
@@ -168,6 +168,120 @@ describe('OutlinePanel', () => {
     )
     await waitFor(() => expect(screen.getByText('Details')).toBeInTheDocument())
     expect(screen.queryByText('Intro')).not.toBeInTheDocument()
+  })
+
+  it.each<HeadingFilter>([
+    { query: 'details', target: 'title', regex: false },
+    { query: 'INSTALL DEPENDENCIES', target: 'content', regex: false },
+    { query: 'install dependencies', target: 'both', regex: false },
+    { query: '^Details$', target: 'title', regex: true },
+    { query: '^install dependencies$', target: 'content', regex: true },
+    { query: '^(Details|install dependencies)$', target: 'both', regex: true },
+  ])('uses current heading positions after inserted and deleted lines for $target search, regex=$regex', async (headingFilter) => {
+    const activeTab = { rootId: 0, relPath: 'a.md' }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      headings: [
+        { level: 1, text: 'Intro', line: 1 },
+        { level: 2, text: 'Details', line: 6 },
+        { level: 2, text: 'Closing', line: 8 },
+      ],
+    }))))
+    const onJump = vi.fn()
+    const { rerender } = render(<OutlinePanel activeTab={activeTab} onJumpToHeading={onJump} />)
+    await waitFor(() => expect(screen.getByText('Closing')).toBeInTheDocument())
+
+    // Disk has Details on line 6. Inserting a preface moves it to line 8;
+    // using the old section bounds would assign its body to Closing.
+    rerender(<OutlinePanel
+      activeTab={activeTab}
+      content={'preface\n\n# Intro\n\nintro body\n\n\n## Details\ninstall dependencies\n## Closing\nclosing body'}
+      onJumpToHeading={onJump}
+      headingFilter={headingFilter}
+    />)
+    await waitFor(() => {
+      expect(screen.getByText('Details')).toBeInTheDocument()
+      expect(screen.queryByText('Intro')).not.toBeInTheDocument()
+      expect(screen.queryByText('Closing')).not.toBeInTheDocument()
+    })
+    expect(screen.getByText('Details')).toHaveStyle({ paddingLeft: '12px' })
+    fireEvent.click(screen.getByText('Details'))
+    expect(onJump).toHaveBeenLastCalledWith(8)
+
+    // Removing the preface and blank lines moves Details before its cached
+    // position. Its body must still belong to Details and jumps must follow it.
+    rerender(<OutlinePanel
+      activeTab={activeTab}
+      content={'# Intro\nintro body\n## Details\ninstall dependencies\n## Closing\nclosing body'}
+      onJumpToHeading={onJump}
+      headingFilter={headingFilter}
+    />)
+    await waitFor(() => {
+      expect(screen.getByText('Details')).toBeInTheDocument()
+      expect(screen.queryByText('Intro')).not.toBeInTheDocument()
+      expect(screen.queryByText('Closing')).not.toBeInTheDocument()
+    })
+    fireEvent.click(screen.getByText('Details'))
+    expect(onJump).toHaveBeenLastCalledWith(3)
+  })
+
+  it('derives current heading text and levels while ignoring headings inside fenced code', async () => {
+    const activeTab = { rootId: 0, relPath: 'a.md' }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      headings: [{ level: 1, text: 'Old title', line: 1 }],
+    }))))
+    const onJump = vi.fn()
+    const { rerender } = render(<OutlinePanel activeTab={activeTab} onJumpToHeading={onJump} />)
+    await waitFor(() => expect(screen.getByText('Old title')).toBeInTheDocument())
+
+    rerender(<OutlinePanel
+      activeTab={activeTab}
+      content={'### Updated title  \r\nbody\r\n```md\r\n# Fenced title\r\n```\r\n## After fence\r\nlast body'}
+      onJumpToHeading={onJump}
+    />)
+    expect(screen.getByText('Updated title')).toHaveStyle({ paddingLeft: '24px' })
+    expect(screen.getByText('After fence')).toHaveStyle({ paddingLeft: '12px' })
+    expect(screen.queryByText('Old title')).not.toBeInTheDocument()
+    expect(screen.queryByText('Fenced title')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByText('After fence'))
+    expect(onJump).toHaveBeenLastCalledWith(6)
+
+    rerender(<OutlinePanel
+      activeTab={activeTab}
+      content={'### Updated title  \r\nbody\r\n```md\r\n# Fenced title\r\n```\r\n## After fence\r\nlast body'}
+      headingFilter={{ query: 'Fenced title', target: 'content', regex: false }}
+      onJumpToHeading={onJump}
+    />)
+    expect(screen.getByText('Updated title')).toBeInTheDocument()
+    expect(screen.queryByText('After fence')).not.toBeInTheDocument()
+  })
+
+  it('uses fetched headings only while current content is unavailable, including empty content', async () => {
+    const activeTab = { rootId: 0, relPath: 'a.md' }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      headings: [{ level: 1, text: 'Disk title', line: 1 }],
+    }))))
+    const { rerender } = render(<OutlinePanel activeTab={activeTab} content={null} onJumpToHeading={() => {}} />)
+    await waitFor(() => expect(screen.getByText('Disk title')).toBeInTheDocument())
+
+    rerender(<OutlinePanel activeTab={activeTab} content="" onJumpToHeading={() => {}} />)
+    expect(screen.queryByText('Disk title')).not.toBeInTheDocument()
+    expect(screen.getByTestId('outline-panel')).toBeEmptyDOMElement()
+
+    rerender(<OutlinePanel activeTab={activeTab} content={undefined} onJumpToHeading={() => {}} />)
+    expect(screen.getByText('Disk title')).toBeInTheDocument()
+  })
+
+  it('renders available current content even if fetching the disk outline failed', async () => {
+    const activeTab = { rootId: 0, relPath: 'a.md' }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ errorCode: 'FILE_NOT_FOUND' }), { status: 404 })
+    ))
+    const { rerender } = render(<OutlinePanel activeTab={activeTab} onJumpToHeading={() => {}} />)
+    await waitFor(() => expect(screen.getByText(/failed to load outline/i)).toBeInTheDocument())
+
+    rerender(<OutlinePanel activeTab={activeTab} content={'# Current title\nbody'} onJumpToHeading={() => {}} />)
+    expect(screen.getByText('Current title')).toBeInTheDocument()
+    expect(screen.queryByText(/failed to load outline/i)).not.toBeInTheDocument()
   })
 
   it('matches content and title when outline target is both', async () => {

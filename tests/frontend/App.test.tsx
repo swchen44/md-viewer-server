@@ -481,12 +481,12 @@ describe('App search wiring', () => {
     await vi.waitFor(() => expect(screen.getByRole('heading', { name: 'Intro' })).toBeInTheDocument())
 
     fireEvent.click(screen.getByRole('button', { name: /outline/i }))
-    await vi.waitFor(() => expect(screen.getByText('Details')).toBeInTheDocument())
+    const outlinePanel = within(screen.getByTestId('outline-panel'))
+    await vi.waitFor(() => expect(outlinePanel.getByText('Details')).toBeInTheDocument())
     fireEvent.click(screen.getByText(/^content$/i))
     fireEvent.change(screen.getByPlaceholderText(/search/i), { target: { value: 'detail body' } })
     await vi.advanceTimersByTimeAsync(300)
 
-    const outlinePanel = within(screen.getByTestId('outline-panel'))
     await vi.waitFor(() => expect(outlinePanel.getByText('Details')).toBeInTheDocument())
     expect(outlinePanel.queryByText('Intro')).not.toBeInTheDocument()
     expect(

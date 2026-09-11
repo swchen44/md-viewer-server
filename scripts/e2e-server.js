@@ -99,6 +99,7 @@ function main() {
       ...process.env,
       XDG_CONFIG_HOME: fixture.configHome,
       XDG_STATE_HOME: fixture.stateHome,
+      MVS_E2E_BIND_HOST: '127.0.0.1',
     },
     stdio: 'inherit',
   })

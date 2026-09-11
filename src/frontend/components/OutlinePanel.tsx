@@ -33,10 +33,27 @@ function sameTab(a: ActiveTabRef | null, b: ActiveTabRef | null): boolean {
   return a.rootId === b.rootId && a.relPath === b.relPath
 }
 
-// Outline search never calls a *file/outline* API for filtering: the headings
-// for the active tab are already loaded in memory (fetched once per tab
-// below). Plain-text filtering is a simple case-insensitive substring scan —
-// no backtracking risk, so it stays synchronous here.
+// Match buildOutline in src/server/search.js, including its fenced-code rules.
+// Current content supplies both headings and section boundaries so edits cannot
+// make the display, search results, and jump positions use different snapshots.
+function buildHeadings(content: string): Heading[] {
+  const headings: Heading[] = []
+  let inFence = false
+  content.split(/\r?\n/).forEach((line, index) => {
+    if (/^```/.test(line.trim())) {
+      inFence = !inFence
+      return
+    }
+    if (inFence) return
+    const match = /^(#{1,6})\s+(.+)$/.exec(line)
+    if (match) {
+      headings.push({ level: match[1].length, text: match[2].trim(), line: index + 1 })
+    }
+  })
+  return headings
+}
+
+// Filtering stays in memory; a query never triggers another file/outline API call.
 function buildSectionContents(headings: Heading[], content: string | null | undefined): string[] {
   if (content === null || content === undefined) return headings.map(() => '')
   const lines = content.split(/\r?\n/)
@@ -86,7 +103,7 @@ function applyPlainTextFilter(
 
 export function OutlinePanel({ activeTab, content, onJumpToHeading, headingFilter }: OutlinePanelProps) {
   const { t } = useTranslation()
-  const [headings, setHeadings] = useState<Heading[]>([])
+  const [fetchedHeadings, setFetchedHeadings] = useState<Heading[]>([])
   const [loadError, setLoadError] = useState(false)
   // Records the result of the most recently *completed* regex match, tagged
   // with the (query, headings) it was computed against. visibleHeadings below
@@ -113,10 +130,14 @@ export function OutlinePanel({ activeTab, content, onJumpToHeading, headingFilte
   const [prevActiveTab, setPrevActiveTab] = useState(activeTab)
   if (!sameTab(prevActiveTab, activeTab)) {
     setPrevActiveTab(activeTab)
-    setHeadings([])
+    setFetchedHeadings([])
     setLoadError(false)
   }
 
+  const headings = useMemo(
+    () => content == null ? fetchedHeadings : buildHeadings(content),
+    [content, fetchedHeadings]
+  )
   const sectionContents = useMemo(() => buildSectionContents(headings, content), [headings, content])
   const target = headingFilter?.target ?? 'title'
   const searchTexts = useMemo(
@@ -132,16 +153,16 @@ export function OutlinePanel({ activeTab, content, onJumpToHeading, headingFilte
         const data = await res.json()
         if (cancelled) return
         if (!res.ok) {
-          setHeadings([])
+          setFetchedHeadings([])
           setLoadError(true)
           return
         }
-        setHeadings(data.headings)
+        setFetchedHeadings(data.headings)
         setLoadError(false)
       })
       .catch(() => {
         if (!cancelled) {
-          setHeadings([])
+          setFetchedHeadings([])
           setLoadError(true)
         }
       })
@@ -202,7 +223,7 @@ export function OutlinePanel({ activeTab, content, onJumpToHeading, headingFilte
     return <div data-testid="outline-panel">{t('outline.noFileOpen', 'No file open')}</div>
   }
 
-  if (loadError) {
+  if (loadError && content == null) {
     return (
       <div data-testid="outline-panel">{t('outline.loadError', 'Failed to load outline')}</div>
     )

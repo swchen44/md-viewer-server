@@ -32,6 +32,13 @@ function readPackageVersion() {
 }
 
 export function startServer({ logLevel = 'info' } = {}) {
+  // Only the fixed-token E2E fixture opts into this override. Reject invalid
+  // values rather than risk silently exposing the fixture to the LAN.
+  const e2eBindHost = process.env.MVS_E2E_BIND_HOST
+  if (e2eBindHost !== undefined && e2eBindHost !== '127.0.0.1') {
+    throw new Error('MVS_E2E_BIND_HOST must be 127.0.0.1')
+  }
+  const bindHost = e2eBindHost ?? '0.0.0.0'
   const configDir = getConfigDir()
   const stateDir = getStateDir()
   fs.mkdirSync(stateDir, { recursive: true })
@@ -120,7 +127,7 @@ export function startServer({ logLevel = 'info' } = {}) {
     process.exit(1)
   })
 
-  server.listen(config.port, '0.0.0.0', () => {
+  server.listen(config.port, bindHost, () => {
     fs.writeFileSync(path.join(stateDir, 'server.pid'), String(process.pid))
     logger.info({ port: server.address().port }, 'server listening')
     wsServer = createWsServer(server, { token: config.token, roots })
