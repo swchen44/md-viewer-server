@@ -75,6 +75,14 @@ daemon 遵循 XDG 目錄：
 
 啟動、權限、port 或檔案監控有問題時，執行 `md-viewer-server doctor`。
 
+## 測試
+
+```bash
+npm run test:e2e
+```
+
+Playwright E2E suite 會 build 應用程式並啟動隔離的測試 server。本機瀏覽器安裝與失敗診斷方式見 [Developer Guide](docs/DEVELOPER.md#buildtestlint)。
+
 ## 發布狀態
 
 `npm run build` 會產生 `dist/frontend/`、`dist/bundle.js`、`dist/regex-worker.js`。自包含離線 tarball 與發布到 npm 後的 `npx md-viewer-server` 是規劃中的發布產物，目前尚未完成。發布前不要把 Releases URL 或 `npx` 當成現行安裝方式。

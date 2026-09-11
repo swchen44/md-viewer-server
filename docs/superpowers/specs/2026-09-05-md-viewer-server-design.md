@@ -1,6 +1,6 @@
 # MD Viewer Server — 設計規格
 
-> **Historical design record.** The implementation has moved beyond this document. For current commands, API behavior, security boundaries, and test commands, use [README](../../../README.md) and [Developer Guide](../../../docs/DEVELOPER.md). Some items below remain planned or intentionally differ from the current implementation.
+> **Historical design record.** The implementation has moved beyond this document, and the Playwright E2E suite is now implemented. For current commands, API behavior, security boundaries, and test commands, use [README](../../../README.md) and [Developer Guide](../../../docs/DEVELOPER.md). Some items below remain historical planned items or intentionally differ from the current implementation.
 
 日期：2026-09-05
 
@@ -307,7 +307,7 @@ CLI 指令：
 
 - **Unit**（Vitest）：後端純函式（token 產生、mtime 比對邏輯、副檔名過濾、路徑安全檢查、搜尋比對/regex 驗證、XDG 路徑解析含 fallback、doctor 各檢查項目的判斷邏輯）；前端純邏輯（i18n 格式化、tab 狀態 reducer、dirty 判斷）
 - **Integration**（Vitest + supertest 等）：REST API 端到端測試（含 409 衝突情境、多 root 檔案列表、`.bak` 備份行為、path traversal 防護、搜尋 API 各種 mode）；WebSocket 推播測試（改檔案 → 驗證收到對應事件）
-- **E2E**（Playwright）：完整使用情境 —— 帶 token 連線（含網址 token 清除行為）、開檔編輯存檔、模擬外部改檔觸發衝突對話框、搜尋各模式切換、側邊欄兩種模式切換、多 root 顯示、html sandbox 是否成功阻擋 script 存取 token、RWD 窄螢幕基本可用性
+- **E2E**（Playwright，已實作）：目前涵蓋帶 token 連線與網址 token 清除、開檔編輯存檔、外部改檔衝突、搜尋與大綱模式、乾淨檢視分頁重新載入、隱私設定跨頁同步、HTML sandbox，以及跨頁分頁同步。多 root 顯示與 RWD 窄螢幕基本可用性仍是此歷史設計記錄中的規劃項目。
 
 ### `tests/` 目錄結構
 

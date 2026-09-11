@@ -75,6 +75,14 @@ The daemon follows XDG directories:
 
 Run `md-viewer-server doctor` when startup, permissions, port, or watcher checks need diagnosis.
 
+## Tests
+
+```bash
+npm run test:e2e
+```
+
+The Playwright E2E suite builds the application and starts an isolated test server. For local browser setup and failure diagnostics, see the [Developer Guide](docs/DEVELOPER.md#buildtestlint).
+
 ## Release status
 
 `npm run build` creates `dist/frontend/`, `dist/bundle.js`, and `dist/regex-worker.js`. A self-contained offline tarball and the published `npx md-viewer-server` flow are planned release artifacts, not current installation methods. Do not document a release URL or use `npx` until that package/version has been published.

@@ -130,10 +130,16 @@ npm run typecheck:frontend
 npm run test:unit
 npm run test:integration
 npm run test:frontend
+npx playwright install chromium # 本機首次執行 E2E 時安裝 Chromium
+npm run test:e2e               # build 後以 Playwright 啟動隔離的真實 server
 npm run dev:frontend         # Vite，/api 與 /ws proxy 到 127.0.0.1:4173
 ```
 
-目前 repository 沒有 `test:e2e` script 或 Playwright suite；CI 不會呼叫不存在的 E2E 命令。新增 E2E 流程時，需同時加入 dependency、script、測試檔與 CI step。
+本機首次執行 E2E 前，先執行 `npx playwright install chromium`。Linux CI 使用 `npx playwright install --with-deps chromium` 安裝 Chromium 與系統相依項目。
+
+`npm run test:e2e` 透過 Playwright 的 `webServer` 先執行 `npm run build`，再以 build 產物啟動真實 server；不需要另外手動啟動 daemon。runner 會在系統暫存目錄建立 `md-viewer-server-e2e-*` fixture，為測試配置獨立的 root、`XDG_CONFIG_HOME` 和 `XDG_STATE_HOME`，並在 server 結束時移除。每個測試也會還原固定檔案、設定與開啟分頁，避免狀態洩漏到下一個測試。
+
+失敗時查看 `playwright-report/` 的 HTML report，以及 `test-results/` 中保留的 trace、screenshot 和 video。CI 會將這兩個目錄以 `playwright-report` artifact 上傳並保留 14 天。
 
 ## 發布
 
